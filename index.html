@@ -332,7 +332,7 @@ let availableYears = []; // years detected in dataset
 // (lihat di URL saat sheet aktif: ...&gid=123456789)
 // Biarkan SHEET_GID = '0' jika hanya ada 1 sheet (sheet pertama)
 // ============================================================
-const GSHEET_ID  = '1mmhwf7GsEbOjKHwZbCJH_F0lMOOoedNSRcPp4ZQ_d8g';
+const GSHEET_ID  = '1kte8dUBPLSQjRjyXw1ekSR9IzlphF3KlGK9IrcdmCak';
 const GSHEET_GID = '0';
 // Contoh:
 // const GSHEET_ID  = '1aBcDeFgHiJkLmNoPqRsTuVwXyZ123456789';
@@ -1103,6 +1103,7 @@ const config = {
 function render() {
   Plotly.newPlot('chart', buildTraces(), layout, config);
   document.getElementById('info-panel').style.display = 'block';
+  renderSidebar();
 }
 
 function setMode(mode) {
@@ -1238,13 +1239,6 @@ function setSortMode(mode) {
   renderSidebar();
 }
 
-// Patch render() to also update sidebar
-const _origRender = render;
-function render() {
-  _origRender();
-  renderSidebar();
-}
-
 // ---- End Sidebar ----
 
 // Cluster toggle buttons (initial build)
@@ -1266,11 +1260,10 @@ CLUSTER_NAMES.forEach(name => {
   toggleWrap.appendChild(btn);
 });
 
-// Render default data immediately — no overlay
+// Render default data immediately
 render();
-document.getElementById('info-panel').style.display = 'block';
 
-// Lalu fetch data terbaru dari Google Sheets (jika GSHEET_ID sudah diisi)
+// Fetch data terbaru dari Google Sheets
 fetchFromGSheet();
 </script>
 </body>
