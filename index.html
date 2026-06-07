@@ -734,6 +734,8 @@ function updateStats() {
   if (vals[3]) vals[3].textContent = cc['Tactical & Resilient'] || 0;
   if (vals[4]) vals[4].textContent = cc['Cybernetic Territory'] || 0;
 }
+
+function refreshAll(label, count) {
   document.getElementById('corpus-label').textContent = `Datascape Studio Perancangan Arsitektur ITS`;
   document.getElementById('upload-bar-info').textContent = `· ${label} · ${count} proyek`;
 
