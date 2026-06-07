@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terrain of Architectural Discourse — TA 2025</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0c14;
+    color: #e0e4f0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 20px 32px 12px;
+    border-bottom: 1px solid #1e2340;
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #c8d0f0;
+  }
+  header p {
+    font-size: 0.78rem;
+    color: #6070a8;
+    letter-spacing: 0.06em;
+  }
+  #controls {
+    padding: 10px 32px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    background: #0d0f1a;
+    border-bottom: 1px solid #1e2340;
+  }
+  .ctrl-group { display: flex; gap: 6px; align-items: center; }
+  .ctrl-label { font-size: 0.7rem; color: #6070a8; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
+  .btn {
+    padding: 6px 14px;
+    border: 1px solid #2a3060;
+    background: #131728;
+    color: #8090c8;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: #1e2548; color: #c0cce8; border-color: #3a4880; }
+  .btn.active { background: #1e2c6a; color: #a8c0f8; border-color: #4a6adc; }
+  .sep { width: 1px; height: 22px; background: #1e2340; margin: 0 6px; }
+  .toggle-cluster {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px; border-radius: 3px; border: 1px solid transparent;
+    font-size: 0.7rem; cursor: pointer; transition: all 0.15s;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .toggle-cluster .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  #chart-wrap { flex: 1; position: relative; min-height: 520px; }
+  #chart { width: 100%; height: calc(100vh - 145px); min-height: 500px; }
+  #legend {
+    position: absolute; bottom: 20px; left: 24px;
+    background: rgba(10,12,22,0.88);
+    border: 1px solid #1e2340;
+    border-radius: 5px;
+    padding: 12px 16px;
+    font-size: 0.68rem;
+    line-height: 1.7;
+    pointer-events: none;
+  }
+  #legend h3 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #4a5888; margin-bottom: 6px; }
+  .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; color: #8090b8; }
+  .leg-swatch { width: 24px; height: 6px; border-radius: 3px; flex-shrink: 0; }
+  #info-panel {
+    position: absolute; top: 16px; right: 16px;
+    background: rgba(10,12,22,0.9);
+    border: 1px solid #2a3060;
+    border-radius: 5px;
+    padding: 14px 18px;
+    font-size: 0.72rem;
+    max-width: 220px;
+    display: none;
+  }
+  #info-panel h4 { font-size: 0.68rem; color: #6888c8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .stat-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 4px; color: #8090b8; }
+  .stat-val { color: #c0d0f0; font-weight: 600; }
+  footer {
+    padding: 8px 32px;
+    font-size: 0.65rem;
+    color: #2a3460;
+    border-top: 1px solid #131728;
+    display: flex; gap: 24px; flex-wrap: wrap;
+  }
+  footer span { color: #3a4870; }
+
+  /* Upload panel */
+  #upload-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(5,7,16,0.92);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  #upload-box {
+    background: #0d0f1e;
+    border: 1px solid #2a3460;
+    border-radius: 10px;
+    padding: 40px 48px;
+    max-width: 480px; width: 90%;
+    text-align: center;
+  }
+  #upload-box h2 { font-size: 1rem; color: #c0d0f0; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+  #upload-box p { font-size: 0.75rem; color: #4a5888; line-height: 1.6; margin-bottom: 24px; }
+  #drop-zone {
+    border: 1.5px dashed #2a3a6a;
+    border-radius: 7px;
+    padding: 32px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+  #drop-zone:hover, #drop-zone.dragover { border-color: #4a6adc; background: #1a2040; }
+  #drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+  #drop-zone .dz-label { font-size: 0.8rem; color: #6070a8; }
+  #drop-zone .dz-sub { font-size: 0.68rem; color: #3a4870; margin-top: 4px; }
+  #file-input { display: none; }
+  .upload-btn {
+    display: inline-block; padding: 8px 22px;
+    background: #1e2c6a; color: #a8c0f8;
+    border: 1px solid #4a6adc; border-radius: 4px;
+    font-size: 0.75rem; cursor: pointer;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    transition: all 0.15s; margin: 4px;
+  }
+  .upload-btn:hover { background: #2a3c8a; color: #c8d8ff; }
+  .upload-btn.secondary { background: transparent; color: #4a5888; border-color: #2a3460; }
+  .upload-btn.secondary:hover { color: #8090b8; border-color: #3a4870; }
+  #upload-status { font-size: 0.72rem; margin-top: 14px; min-height: 20px; }
+  #upload-status.ok { color: #4ade80; }
+  #upload-status.err { color: #f87171; }
+  #upload-status.info { color: #6888c8; }
+
+  /* Upload badge in header */
+  #data-badge {
+    display: none; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 3px;
+    background: #0d1a30; border: 1px solid #1e3460;
+    font-size: 0.68rem; color: #4a8888; cursor: pointer;
+  }
+  #data-badge:hover { border-color: #2a5480; color: #6aacac; }
+  #data-badge .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+
+  /* Column mapper modal */
+  #mapper-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(5,7,16,0.94);
+    display: none; align-items: center; justify-content: center;
+  }
+  #mapper-box {
+    background: #0d0f1e; border: 1px solid #2a3460;
+    border-radius: 10px; padding: 28px 36px;
+    max-width: 560px; width: 92%;
+  }
+  #mapper-box h3 { font-size: 0.85rem; color: #c0d0f0; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  #mapper-box p { font-size: 0.72rem; color: #4a5888; margin-bottom: 20px; }
+  .map-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .map-row label { font-size: 0.7rem; color: #6888c8; text-transform: uppercase; width: 100px; flex-shrink: 0; }
+  .map-row select {
+    flex: 1; background: #131728; border: 1px solid #2a3460;
+    color: #a0b0d8; border-radius: 3px; padding: 5px 8px; font-size: 0.72rem;
+  }
+  #mapper-preview { margin-top: 16px; font-size: 0.68rem; color: #3a5888; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Terrain of Architectural Discourse</h1>
+  <p id="corpus-label">Curatorial Datascape — 123 Final Projects · TA 2025/2</p>
+  <div id="data-badge" onclick="showUpload()" title="Ganti dataset">
+    <div class="badge-dot"></div>
+    <span id="badge-text">TA 2025/2 · 123 proyek</span>
+    <span style="color:#2a5888">↑ update</span>
+  </div>
+</header>
+
+<!-- Upload overlay -->
+<div id="upload-overlay">
+  <div id="upload-box">
+    <h2>Load Dataset</h2>
+    <p>Upload file XLSX dengan kolom:<br>
+    <strong style="color:#6888c8">ID · Judul · Kuadran · Koordinat (X,Y,Z)</strong><br>
+    Format koordinat: <code style="color:#4a9878">(−6,+7,+3)</code> atau <code style="color:#4a9878">-6,7,3</code></p>
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="handleDrop(event)">
+      <div class="icon">📊</div>
+      <div class="dz-label">Drag &amp; drop file XLSX di sini</div>
+      <div class="dz-sub">atau klik untuk memilih file</div>
+    </div>
+    <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileInput(this)">
+    <div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">Pilih File XLSX</button>
+      <button class="upload-btn secondary" onclick="loadDefault()">Gunakan Data Bawaan</button>
+    </div>
+    <div id="upload-status"></div>
+  </div>
+</div>
+
+<!-- Column mapper overlay -->
+<div id="mapper-overlay">
+  <div id="mapper-box">
+    <h3>Pemetaan Kolom</h3>
+    <p>Pilih kolom spreadsheet yang sesuai dengan setiap variabel visualisasi.</p>
+    <div id="mapper-rows"></div>
+    <div id="mapper-preview"></div>
+    <div style="margin-top:18px; display:flex; gap:8px;">
+      <button class="upload-btn" onclick="applyMapping()">Terapkan & Render</button>
+      <button class="upload-btn secondary" onclick="cancelMapper()">Batal</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="ctrl-group">
+    <span class="ctrl-label">Terrain</span>
+    <button class="btn active" id="btn-density" onclick="setMode('density')">Density</button>
+    <button class="btn" id="btn-novelty" onclick="setMode('novelty')">Novelty</button>
+    <button class="btn" id="btn-hybrid" onclick="setMode('hybrid')">Hybrid</button>
+  </div>
+  <div class="sep"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Clusters</span>
+    <div id="cluster-toggles"></div>
+  </div>
+  <div class="sep"></div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Markers</span>
+    <button class="btn active" id="btn-markers" onclick="toggleMarkers()">Show Projects</button>
+    <button class="btn active" id="btn-outliers" onclick="toggleOutliers()">Show Outliers</button>
+  </div>
+</div>
+
+<div id="chart-wrap">
+  <div id="chart"></div>
+  <div id="legend">
+    <h3>Temporal Color Scale</h3>
+    <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#1a3a7a,#3a6ac8)"></div> Past — Historical Precedents</div>
+    <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#e8e8e8,#ffffff)"></div> Present — Contemporary Response</div>
+    <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#c84040,#8a1a1a)"></div> Future — Speculative Projection</div>
+    <div style="margin-top:8px; border-top:1px solid #1e2340; padding-top:8px;">
+    <h3>Outlier Beacons</h3>
+    <div class="leg-row">▲ Epistemic Pioneers — high novelty index</div>
+    </div>
+  </div>
+  <div id="info-panel">
+    <h4>Corpus Statistics</h4>
+    <div class="stat-row"><span>Total Projects</span><span class="stat-val">123</span></div>
+    <div class="stat-row"><span>Structured Mind</span><span class="stat-val">24</span></div>
+    <div class="stat-row"><span>Experiential Poetics</span><span class="stat-val">29</span></div>
+    <div class="stat-row"><span>Tactical & Resilient</span><span class="stat-val">45</span></div>
+    <div class="stat-row"><span>Cybernetic Territory</span><span class="stat-val">25</span></div>
+    <div style="margin-top:8px; border-top:1px solid #1e2340; padding-top:8px;" class="stat-row">
+      <span>Outliers Detected</span><span class="stat-val" id="outlier-count">—</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>X Axis: Operational Logic — Systemic ↔ Contingent</span>
+  <span>Y Axis: Horizon of Intention — Territorial ↔ Somatic</span>
+  <span>Z Axis: Temporal — Past ↔ Future (used as color)</span>
+  <span>Elevation: Kernel Density / Novelty Index</span>
+</footer>
+
+<script>
+// ---- Dataset (default embedded, overridable via XLSX upload) ----
+const DEFAULT_PROJECTS = [{"id": "TA1", "title": "Dynamic Support Hub Biofilik", "x": -6, "y": 7, "z": 3, "cluster": "Structured Mind"}, {"id": "TA2", "title": "Hunian Vertikal Bioklimatik Penghuni", "x": -7, "y": 4, "z": 2, "cluster": "Structured Mind"}, {"id": "TA3", "title": "Surabaya Concert Hall Parametrik", "x": -9, "y": 5, "z": 1, "cluster": "Structured Mind"}, {"id": "TA13", "title": "Correctional Facility Humanis", "x": -5, "y": 6, "z": 3, "cluster": "Structured Mind"}, {"id": "TA15", "title": "Synomorphy Reframing Space Gen Z", "x": -4, "y": 7, "z": 6, "cluster": "Structured Mind"}, {"id": "TA19", "title": "Rehab Mental Env Stress Theory", "x": -6, "y": 8, "z": 3, "cluster": "Structured Mind"}, {"id": "TA24", "title": "Teori Behavior Setting Budaya Ngopi", "x": -3, "y": 5, "z": 2, "cluster": "Structured Mind"}, {"id": "TA25", "title": "Ruang Salutogenik Antibodi Urban", "x": -5, "y": 9, "z": 4, "cluster": "Structured Mind"}, {"id": "TA29", "title": "Hunian Pekerja Gen Z Biofilik", "x": -6, "y": 6, "z": 3, "cluster": "Structured Mind"}, {"id": "TA32", "title": "Neuroarchitecture Kejahatan Remaja", "x": -5, "y": 8, "z": 4, "cluster": "Structured Mind"}, {"id": "TA41", "title": "Rumah Damping Narapidana Biofilik", "x": -5, "y": 7, "z": 3, "cluster": "Structured Mind"}, {"id": "TA47", "title": "Teori Defensible Space Muslimah", "x": -4, "y": 6, "z": 2, "cluster": "Structured Mind"}, {"id": "TA61", "title": "Neuroarchitecture Skizofrenia (EEG)", "x": -4, "y": 10, "z": 5, "cluster": "Structured Mind"}, {"id": "TA67", "title": "Desain Biofilik Respons Iklim", "x": -5, "y": 5, "z": 2, "cluster": "Structured Mind"}, {"id": "TA69", "title": "Arsitektur Pendidikan Anak Biofilik", "x": -5, "y": 6, "z": 3, "cluster": "Structured Mind"}, {"id": "TA73", "title": "Psychological Restoration Biofilik Kota", "x": -6, "y": 7, "z": 4, "cluster": "Structured Mind"}, {"id": "TA82", "title": "Teori Behavioral Architecture Ponpes", "x": -4, "y": 5, "z": 2, "cluster": "Structured Mind"}, {"id": "TA84", "title": "Desain Salutogenik Neuroinflamasi", "x": -5, "y": 8, "z": 5, "cluster": "Structured Mind"}, {"id": "TA85", "title": "Hunian Islami Berbasis Behavior Setting", "x": -4, "y": 5, "z": 2, "cluster": "Structured Mind"}, {"id": "TA94", "title": "Arsitektur Kesehatan Ibu & Anak", "x": -5, "y": 6, "z": 3, "cluster": "Structured Mind"}, {"id": "TA96", "title": "Reframing Age-Friendly Dementia", "x": -5, "y": 8, "z": 5, "cluster": "Structured Mind"}, {"id": "TA103", "title": "Fasilitas Pendidikan Cognitive Arch", "x": -4, "y": 8, "z": 5, "cluster": "Structured Mind"}, {"id": "TA108", "title": "Hunian Mikro Klaster Psych Needs", "x": -5, "y": 6, "z": 3, "cluster": "Structured Mind"}, {"id": "TA110", "title": "Aging Within Nature Lansia Biofilik", "x": -6, "y": 7, "z": 4, "cluster": "Structured Mind"}, {"id": "TA5", "title": "Pantai Boom Tuban Genius Loci", "x": 5, "y": 4, "z": 2, "cluster": "Experiential Poetics"}, {"id": "TA8", "title": "Arsitektur Naratif Monumen Tragedi PKI", "x": 7, "y": 8, "z": 1, "cluster": "Experiential Poetics"}, {"id": "TA11", "title": "Light and Silence Interfaith Sacred Space", "x": 3, "y": 10, "z": 7, "cluster": "Experiential Poetics"}, {"id": "TA14", "title": "Redesain Taman Anjuk Ladang Memori", "x": 6, "y": 5, "z": 1, "cluster": "Experiential Poetics"}, {"id": "TA16", "title": "Living in Non-Placeness Pasar Blauran", "x": 7, "y": 4, "z": 3, "cluster": "Experiential Poetics"}, {"id": "TA18", "title": "Arsitektur Atmosferik Bawah Tanah", "x": 5, "y": 8, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA23", "title": "Urban Healing Sanctuary Marātib an-Nafs", "x": 4, "y": 7, "z": 3, "cluster": "Experiential Poetics"}, {"id": "TA36", "title": "Silent Threshold Rumah Aman Trauma", "x": 4, "y": 9, "z": 4, "cluster": "Experiential Poetics"}, {"id": "TA45", "title": "Ritme Nokturnal Dialektika Burst-Silence", "x": 6, "y": 7, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA46", "title": "The Uncanny Graveyard Multisensori", "x": 8, "y": 9, "z": 8, "cluster": "Experiential Poetics"}, {"id": "TA51", "title": "Instrumentasi Fenomenologis Musik", "x": 7, "y": 8, "z": 5, "cluster": "Experiential Poetics"}, {"id": "TA53", "title": "Arsitektur Pengalaman Narasi Trinil", "x": 6, "y": 9, "z": 2, "cluster": "Experiential Poetics"}, {"id": "TA54", "title": "Museum Eksperimental Empati Non-Visual", "x": 5, "y": 9, "z": 5, "cluster": "Experiential Poetics"}, {"id": "TA55", "title": "Multi-Sensory Architecture Kayoon Market", "x": 6, "y": 6, "z": 3, "cluster": "Experiential Poetics"}, {"id": "TA72", "title": "Form Follows Nature Prinsip Organik", "x": 5, "y": 5, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA76", "title": "Atmosfer Sensorik Hunian Skizofrenia", "x": 4, "y": 9, "z": 5, "cluster": "Experiential Poetics"}, {"id": "TA86", "title": "Gereja Katolik Berbasis Cahaya Spiritual", "x": 3, "y": 9, "z": 4, "cluster": "Experiential Poetics"}, {"id": "TA87", "title": "Instabilitas Manusia Prosthetic Arch", "x": 7, "y": 6, "z": 10, "cluster": "Experiential Poetics"}, {"id": "TA92", "title": "Luminous & Acoustic Illusions Privacy", "x": 5, "y": 7, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA93", "title": "Arsitektur dan Kefanaan Poetic Space", "x": 4, "y": 10, "z": 9, "cluster": "Experiential Poetics"}, {"id": "TA97", "title": "Autopoiesis (Im)permanensi Arsitektur", "x": 6, "y": 6, "z": 7, "cluster": "Experiential Poetics"}, {"id": "TA99", "title": "Arsitektur Naratif Wonderland Indonesia", "x": 5, "y": 6, "z": 4, "cluster": "Experiential Poetics"}, {"id": "TA100", "title": "Tubuh Dinamis Generator Spasial", "x": 6, "y": 5, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA101", "title": "Paradox Architecture Persepsi Ruang", "x": 5, "y": 7, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA105", "title": "Sequence Narrative Museum Lapindo", "x": 6, "y": 7, "z": 2, "cluster": "Experiential Poetics"}, {"id": "TA106", "title": "Eksplorasi Teori Psikoanalisis Klinik Anak", "x": 5, "y": 8, "z": 4, "cluster": "Experiential Poetics"}, {"id": "TA109", "title": "Fenomenologi Struktural Museum Vespa", "x": 4, "y": 6, "z": 1, "cluster": "Experiential Poetics"}, {"id": "TA115", "title": "The Unhomely Spatial Narrative Uncanny", "x": 6, "y": 8, "z": 6, "cluster": "Experiential Poetics"}, {"id": "TA122", "title": "Humanistic Architecture Elderly Care", "x": 4, "y": 7, "z": 4, "cluster": "Experiential Poetics"}, {"id": "TA4", "title": "The Limits of Flexible Incremental Housing", "x": 6, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA6", "title": "Living with Dark Ecology Lapindo", "x": 9, "y": -9, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA7", "title": "Production of Space After Padel Courts", "x": 4, "y": -4, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA12", "title": "Capital Pragmatism Saudagar Exchange", "x": 8, "y": -6, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA20", "title": "Cultural-Economic Hub Koridor YIA", "x": 5, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA21", "title": "Informal Armature Kawasan Lokalisasi", "x": 8, "y": -7, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA22", "title": "Ekowisata Kopi Mojokerto Arch Ekologi", "x": 4, "y": -6, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA26", "title": "Wetland Laboratory Buffer Industri Gresik", "x": 6, "y": -8, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA28", "title": "Revitalisasi Memulihkan Ruang Publik", "x": 5, "y": -4, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA30", "title": "Kutai Community Center Regionalism", "x": 6, "y": -4, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA33", "title": "Mediating Land Post-Extraction Terrain", "x": 7, "y": -10, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA35", "title": "Place Attachment Hunian Gang Venus", "x": 7, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA37", "title": "Flexible Housing Pandemic-Resilient", "x": 5, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA38", "title": "Arsitektur Sosial Berkelanjutan Sekolah", "x": 6, "y": -6, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA39", "title": "Protected Looseness Residual Spaces", "x": 8, "y": -4, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA40", "title": "Biofilik Berbasis Tempat Desa Adat Mas", "x": 4, "y": -3, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA42", "title": "Pasar Sarlondho Teori Place-Making", "x": 6, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA43", "title": "Arsitektur Penyimpangan Biopolitik", "x": 9, "y": -5, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA50", "title": "Bekas Industri Ecocentric Placemaking", "x": 5, "y": -7, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA52", "title": "Critical Regionalism Dermaga Suku Sasak", "x": 5, "y": -4, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA57", "title": "Cultural Imperialism Concert Hall Sby", "x": 4, "y": -4, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA58", "title": "Ekspresi Resistensi Pusat Komunitas", "x": 6, "y": -4, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA59", "title": "Agrowisata Hortikultura Brakseng Batu", "x": 5, "y": -6, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA62", "title": "Floating Housing Rising Seas Muara Angke", "x": 7, "y": -6, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA63", "title": "Spekulasi Integrasi Formal-Informal", "x": 6, "y": -5, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA64", "title": "Aquatic Urbanism Habitat Perairan", "x": 6, "y": -7, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA66", "title": "Pola (in)Formalitas Arsitektur Peristiwa", "x": 8, "y": -5, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA68", "title": "Waterfront Park Kenjeran Sense of Place", "x": 5, "y": -5, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA70", "title": "Urban Ecology Batik Creative Center", "x": 4, "y": -6, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA75", "title": "Arsitektur Disjungsi Pengadilan Tinggi", "x": 8, "y": -6, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA77", "title": "Progressive Housing Pascaerupsi Semeru", "x": 7, "y": -6, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA79", "title": "Reimagining Gendered Spatial Control", "x": 7, "y": -7, "z": 4, "cluster": "Tactical & Resilient"}, {"id": "TA80", "title": "Adaptable Arch Civic Infrastructure", "x": 6, "y": -5, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA81", "title": "Designing With Death Muara Angke", "x": 8, "y": -8, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA83", "title": "Counterfactual Low-Vigilance Urbanism", "x": 6, "y": -6, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA88", "title": "Critical Regionalism Saung Angklung Udjo", "x": 5, "y": -4, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA90", "title": "Sumenep Community Hub Placemaking", "x": 5, "y": -4, "z": 0, "cluster": "Tactical & Resilient"}, {"id": "TA91", "title": "Perumahan Pesisir Nelayan Tanggap", "x": 6, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA102", "title": "Togetherness Anti-Placelessness Village", "x": 6, "y": -5, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA107", "title": "Landscape Urbanism Bekas Industri", "x": 6, "y": -9, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA111", "title": "Failure of Typological Repetition", "x": 9, "y": -7, "z": 4, "cluster": "Tactical & Resilient"}, {"id": "TA112", "title": "Vocational Hub Disability Inclusion", "x": 5, "y": -4, "z": 1, "cluster": "Tactical & Resilient"}, {"id": "TA113", "title": "Mediating Grounds Gersik Putih Pesisir", "x": 7, "y": -8, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA116", "title": "Critical Spatial Practice Social Space", "x": 7, "y": -6, "z": 3, "cluster": "Tactical & Resilient"}, {"id": "TA119", "title": "Community Hub Rhythmic Field Ludic City", "x": 6, "y": -4, "z": 2, "cluster": "Tactical & Resilient"}, {"id": "TA9", "title": "Transit Hub Node-Place Stasiun Malang", "x": -8, "y": -7, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA10", "title": "Modular Vertical Greenhouse Metabolism", "x": -9, "y": -6, "z": -3, "cluster": "Cybernetic Territory"}, {"id": "TA17", "title": "Stasiun Transit Sprawl Retrofit", "x": -7, "y": -5, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA27", "title": "Sustainable Urban Mobility One-Spot", "x": -10, "y": -4, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA31", "title": "Arsitektur Generatif Datascape Combinatoria", "x": -10, "y": -7, "z": 1, "cluster": "Cybernetic Territory"}, {"id": "TA34", "title": "Rumah Pemuliaan Serealia Maros", "x": -8, "y": -6, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA44", "title": "Transit for People Terminal Pantura", "x": -9, "y": -5, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA48", "title": "Third Place Digital ICT Integration", "x": -6, "y": -3, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA49", "title": "Urban Walkscape Walkability Trotoar", "x": -7, "y": -4, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA56", "title": "Open Building Hunian Vertikal Partisipatif", "x": -8, "y": -4, "z": -3, "cluster": "Cybernetic Territory"}, {"id": "TA60", "title": "Green Building Mitigasi Urban Heat Island", "x": -9, "y": -8, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA65", "title": "Form Follows Fashion Circular Economy", "x": -6, "y": -5, "z": 0, "cluster": "Cybernetic Territory"}, {"id": "TA71", "title": "Watershed Management WSUD Pintu Air", "x": -9, "y": -7, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA74", "title": "Eco Resilient Habitat Permukiman Tropis", "x": -7, "y": -6, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA78", "title": "Inklusivitas Waterfront Universal Design", "x": -7, "y": -5, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA89", "title": "Permukiman Inkremental Open Building", "x": -8, "y": -4, "z": -3, "cluster": "Cybernetic Territory"}, {"id": "TA95", "title": "Arsitektur Resiliensi Ekonomi Urban", "x": -6, "y": -5, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA98", "title": "Signal Processing Architecture Bunyi", "x": -9, "y": -6, "z": 1, "cluster": "Cybernetic Territory"}, {"id": "TA104", "title": "Modularitas Prefabrikasi Hunian Vertikal", "x": -9, "y": -5, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA114", "title": "Catalyst of Economy Waterfront Reclamation", "x": -8, "y": -8, "z": -1, "cluster": "Cybernetic Territory"}, {"id": "TA117", "title": "District of Automotive Passion PIK II", "x": -7, "y": -6, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA118", "title": "Metabolism Affordable Housing Jakarta", "x": -8, "y": -5, "z": -4, "cluster": "Cybernetic Territory"}, {"id": "TA120", "title": "Modification Thinking Endless Process", "x": -7, "y": -4, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA121", "title": "Architourism Experiential Tourism Hub", "x": -6, "y": -5, "z": -2, "cluster": "Cybernetic Territory"}, {"id": "TA123", "title": "Kinerja Termal Dinding Limbah Sawit", "x": -10, "y": -6, "z": -3, "cluster": "Cybernetic Territory"}];
+
+let PROJECTS = [...DEFAULT_PROJECTS];
+let _rawSheetData = null; // for column mapper
+
+// ---- XLSX Upload & Parse ----
+
+function setStatus(msg, type='info') {
+  const el = document.getElementById('upload-status');
+  el.textContent = msg; el.className = type;
+}
+
+function showUpload() {
+  document.getElementById('upload-overlay').style.display = 'flex';
+  setStatus('');
+}
+
+function hideUpload() {
+  document.getElementById('upload-overlay').style.display = 'none';
+}
+
+function loadDefault() {
+  PROJECTS = [...DEFAULT_PROJECTS];
+  hideUpload();
+  refreshAll('TA 2025/2', DEFAULT_PROJECTS.length);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFileInput(input) {
+  if (input.files[0]) processFile(input.files[0]);
+}
+
+function processFile(file) {
+  if (!file.name.match(/\.(xlsx|xls)$/i)) {
+    setStatus('❌ File harus berformat .xlsx atau .xls', 'err'); return;
+  }
+  setStatus('⏳ Membaca file…', 'info');
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { setStatus('❌ Sheet kosong atau tidak ada data', 'err'); return; }
+
+      _rawSheetData = rows;
+      const parsed = tryAutoParse(rows);
+      if (parsed && parsed.length > 0) {
+        setStatus(`✓ Berhasil: ${parsed.length} proyek terdeteksi otomatis`, 'ok');
+        setTimeout(() => {
+          PROJECTS = parsed;
+          hideUpload();
+          refreshAll(file.name.replace(/\.(xlsx|xls)$/i,''), parsed.length);
+        }, 800);
+      } else {
+        // Show column mapper
+        setStatus('Kolom tidak terdeteksi otomatis — pilih secara manual', 'info');
+        setTimeout(() => showMapper(rows, file.name), 600);
+      }
+    } catch(err) {
+      setStatus('❌ Gagal membaca file: ' + err.message, 'err');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function tryAutoParse(rows) {
+  // Find header row (first row containing ID/Kuadran/Koordinat-like headers)
+  let headerIdx = -1;
+  let colMap = {};
+  for (let r = 0; r < Math.min(5, rows.length); r++) {
+    const row = rows[r].map(c => String(c).toLowerCase().trim());
+    const idCol   = row.findIndex(c => c === 'id' || c === 'no');
+    const titleCol= row.findIndex(c => c.includes('judul') || c.includes('title') || c.includes('nama'));
+    const coordCol= row.findIndex(c => c.includes('koordinat') || c.includes('coord') || c.includes('(x'));
+    const quadCol = row.findIndex(c => c.includes('kuadran') || c.includes('cluster') || c.includes('quadrant'));
+    if (coordCol >= 0 && (idCol >= 0 || titleCol >= 0)) {
+      headerIdx = r;
+      colMap = { id: idCol, title: titleCol, coord: coordCol, quad: quadCol };
+      break;
+    }
+  }
+  if (headerIdx < 0) return null;
+
+  const results = [];
+  const CLUSTER_MAP = {
+    'i': 'Structured Mind', 'ii': 'Experiential Poetics',
+    'iii': 'Tactical & Resilient', 'iv': 'Cybernetic Territory',
+    'structured mind': 'Structured Mind', 'experiential poetics': 'Experiential Poetics',
+    'tactical & resilient': 'Tactical & Resilient', 'tactical and resilient': 'Tactical & Resilient',
+    'cybernetic territory': 'Cybernetic Territory'
+  };
+
+  for (let r = headerIdx + 1; r < rows.length; r++) {
+    const row = rows[r];
+    const coordRaw = String(row[colMap.coord] || '').replace(/−/g,'−').replace(/–/g,'-').replace(/−/g,'-');
+    const nums = coordRaw.replace(/[^0-9.+-]/g, ' ').trim().split(/\s+/).filter(Boolean).map(Number);
+    if (nums.length < 2 || nums.some(isNaN)) continue;
+
+    const id    = colMap.id >= 0 ? String(row[colMap.id]).trim() : `P${r}`;
+    const title = colMap.title >= 0 ? String(row[colMap.title]).trim() : id;
+    const quad  = colMap.quad >= 0 ? String(row[colMap.quad]).trim() : '';
+    const cluster = CLUSTER_MAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
+
+    if (!id || id === '') continue;
+    results.push({ id, title, x: nums[0], y: nums[1], z: nums[2] || 0, cluster });
+  }
+  return results.length > 0 ? results : null;
+}
+
+function assignCluster(x, y) {
+  if (x <= 0 && y >= 0) return 'Structured Mind';
+  if (x >= 0 && y >= 0) return 'Experiential Poetics';
+  if (x >= 0 && y <= 0) return 'Tactical & Resilient';
+  return 'Cybernetic Territory';
+}
+
+function showMapper(rows, filename) {
+  hideUpload();
+  // Get headers from first non-empty row
+  const header = rows[0].map((c,i) => String(c) || `Kolom ${i+1}`);
+  const opts = header.map((h,i) => `<option value="${i}">${h}</option>`).join('');
+  const na = `<option value="-1">— tidak ada —</option>`;
+
+  const fields = [
+    { key:'id',    label:'ID Proyek',    guess: header.findIndex(h => /^id$/i.test(h)) },
+    { key:'title', label:'Judul',        guess: header.findIndex(h => /judul|title/i.test(h)) },
+    { key:'coord', label:'Koordinat XYZ',guess: header.findIndex(h => /koordinat|coord|\(x/i.test(h)) },
+    { key:'quad',  label:'Kuadran',      guess: header.findIndex(h => /kuadran|cluster/i.test(h)) },
+  ];
+
+  const html = fields.map(f => `
+    <div class="map-row">
+      <label>${f.label}</label>
+      <select id="map-${f.key}">
+        ${f.key !== 'id' && f.key !== 'coord' ? na : ''}
+        ${opts}
+      </select>
+    </div>`).join('');
+
+  document.getElementById('mapper-rows').innerHTML = html;
+  // Set guessed values
+  fields.forEach(f => {
+    const sel = document.getElementById(`map-${f.key}`);
+    if (f.guess >= 0) sel.value = f.guess;
+  });
+
+  document.getElementById('mapper-preview').innerHTML =
+    `<em>Preview: ${rows.length-1} baris ditemukan di sheet pertama</em>`;
+  document.getElementById('mapper-overlay').style.display = 'flex';
+  document.getElementById('mapper-overlay')._filename = filename;
+}
+
+function cancelMapper() {
+  document.getElementById('mapper-overlay').style.display = 'none';
+  showUpload();
+}
+
+function applyMapping() {
+  const idCol    = parseInt(document.getElementById('map-id').value);
+  const titleCol = parseInt(document.getElementById('map-title').value);
+  const coordCol = parseInt(document.getElementById('map-coord').value);
+  const quadCol  = parseInt(document.getElementById('map-quad').value);
+  const filename = document.getElementById('mapper-overlay')._filename || 'Custom';
+
+  if (coordCol < 0) { alert('Kolom Koordinat wajib dipilih'); return; }
+
+  const rows = _rawSheetData;
+  const CLUSTER_MAP = {
+    'i': 'Structured Mind', 'ii': 'Experiential Poetics',
+    'iii': 'Tactical & Resilient', 'iv': 'Cybernetic Territory',
+    'structured mind': 'Structured Mind', 'experiential poetics': 'Experiential Poetics',
+    'tactical & resilient': 'Tactical & Resilient', 'cybernetic territory': 'Cybernetic Territory'
+  };
+
+  const results = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const coordRaw = String(row[coordCol] || '').replace(/[−–]/g,'-');
+    const nums = coordRaw.replace(/[^0-9.+-]/g,' ').trim().split(/\s+/).filter(Boolean).map(Number);
+    if (nums.length < 2 || nums.some(isNaN)) continue;
+    const id    = idCol >= 0    ? String(row[idCol]).trim()    : `P${r}`;
+    const title = titleCol >= 0 ? String(row[titleCol]).trim() : id;
+    const quad  = quadCol >= 0  ? String(row[quadCol]).trim()  : '';
+    const cluster = CLUSTER_MAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
+    if (!id) continue;
+    results.push({ id, title, x: nums[0], y: nums[1], z: nums[2]||0, cluster });
+  }
+
+  if (results.length === 0) { alert('Tidak ada data valid yang bisa diparsing. Periksa format koordinat.'); return; }
+
+  PROJECTS = results;
+  document.getElementById('mapper-overlay').style.display = 'none';
+  refreshAll(filename, results.length);
+}
+
+function refreshAll(label, count) {
+  // Update badge & header
+  document.getElementById('badge-text').textContent = `${label} · ${count} proyek`;
+  document.getElementById('data-badge').style.display = 'flex';
+  document.getElementById('corpus-label').textContent = `Curatorial Datascape — ${count} Projects · ${label}`;
+
+  // Rebuild cluster toggle buttons
+  visibleClusters = new Set(CLUSTER_NAMES);
+  const toggleWrap = document.getElementById('cluster-toggles');
+  toggleWrap.innerHTML = '';
+  CLUSTER_NAMES.forEach(name => {
+    const btn = document.createElement('div');
+    btn.className = 'toggle-cluster';
+    btn.style.cssText = `border-color:${CLUSTER_COLORS[name]}44;color:${CLUSTER_COLORS[name]};background:${CLUSTER_COLORS[name]}18;`;
+    btn.innerHTML = `<div class="dot" style="background:${CLUSTER_COLORS[name]}"></div>${name}`;
+    btn.dataset.active = 'true';
+    btn.addEventListener('click', () => {
+      const active = btn.dataset.active === 'true';
+      btn.dataset.active = active ? 'false' : 'true';
+      btn.style.opacity = active ? '0.35' : '1';
+      if (active) visibleClusters.delete(name); else visibleClusters.add(name);
+      render();
+    });
+    toggleWrap.appendChild(btn);
+  });
+
+  // Update stats panel counts
+  const clusterCount = {};
+  CLUSTER_NAMES.forEach(n => clusterCount[n] = 0);
+  PROJECTS.forEach(p => { if (clusterCount[p.cluster] !== undefined) clusterCount[p.cluster]++; });
+  document.querySelectorAll('.stat-val').forEach((el, i) => {
+    if (i === 0) el.textContent = count;
+    else if (i <= 4) el.textContent = clusterCount[CLUSTER_NAMES[i-1]] || 0;
+  });
+
+  render();
+}
+
+const CLUSTER_COLORS = {
+  'Structured Mind':      '#5b9bd5',
+  'Experiential Poetics': '#a855f7',
+  'Tactical & Resilient': '#22c55e',
+  'Cybernetic Territory': '#f97316'
+};
+
+const CLUSTER_NAMES = Object.keys(CLUSTER_COLORS);
+let visibleClusters = new Set(CLUSTER_NAMES);
+let showMarkers = true;
+let showOutliers = true;
+let currentMode = 'density';
+
+// ---- Terrain Generation ----
+
+function gaussianKDE(px, py, xs, ys, bw) {
+  // evaluate KDE on grid
+  const n = PROJECTS.length;
+  const out = new Float64Array(xs.length * ys.length);
+  let k = 0;
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) {
+      let s = 0;
+      for (let p = 0; p < n; p++) {
+        const dx = (xs[i] - PROJECTS[p].x) / bw;
+        const dy = (ys[j] - PROJECTS[p].y) / bw;
+        s += Math.exp(-0.5 * (dx*dx + dy*dy));
+      }
+      out[k++] = s / (n * 2 * Math.PI * bw * bw);
+    }
+  }
+  return out;
+}
+
+function noveltyField(xs, ys, K=5) {
+  const n = PROJECTS.length;
+  // for each project compute avg dist to K nearest neighbors
+  const noveltyPerProject = PROJECTS.map((p, i) => {
+    const dists = PROJECTS.map((q, j) => {
+      if (i === j) return Infinity;
+      return Math.sqrt((p.x-q.x)**2 + (p.y-q.y)**2);
+    }).sort((a,b) => a-b).slice(0, K);
+    return dists.reduce((s,d) => s+d, 0) / K;
+  });
+
+  // interpolate to grid via inverse distance weighting
+  const out = new Float64Array(xs.length * ys.length);
+  let k = 0;
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i < xs.length; i++) {
+      let num = 0, den = 0;
+      for (let p = 0; p < n; p++) {
+        const d = Math.sqrt((xs[i]-PROJECTS[p].x)**2 + (ys[j]-PROJECTS[p].y)**2) + 1e-6;
+        const w = 1 / (d * d);
+        num += w * noveltyPerProject[p];
+        den += w;
+      }
+      out[k++] = num / den;
+    }
+  }
+  return { field: out, perProject: noveltyPerProject };
+}
+
+function detectOutliers(noveltyPerProject, threshold = 1.5) {
+  const mean = noveltyPerProject.reduce((s,v) => s+v, 0) / noveltyPerProject.length;
+  const std = Math.sqrt(noveltyPerProject.reduce((s,v) => s+(v-mean)**2, 0) / noveltyPerProject.length);
+  return PROJECTS.map((p, i) => ({...p, novelty: noveltyPerProject[i], isOutlier: noveltyPerProject[i] > mean + threshold * std}));
+}
+
+function normalize(arr) {
+  const min = Math.min(...arr), max = Math.max(...arr);
+  return arr.map(v => (v - min) / (max - min + 1e-10));
+}
+
+function buildTerrain() {
+  const RES = 60;
+  const xs = Array.from({length: RES}, (_, i) => -10 + 20 * i / (RES-1));
+  const ys = Array.from({length: RES}, (_, j) => -10 + 20 * j / (RES-1));
+
+  const density = gaussianKDE(null, null, xs, ys, 2.0);
+  const {field: novelty, perProject: noveltyPerProject} = noveltyField(xs, ys);
+
+  const densityNorm = normalize(Array.from(density));
+  const noveltyNorm = normalize(Array.from(novelty));
+
+  const hybrid = densityNorm.map((d, i) => 0.6 * d + 0.4 * noveltyNorm[i]);
+
+  // reshape to 2D
+  const reshape = (flat) => {
+    const z = [];
+    for (let j = 0; j < RES; j++) {
+      const row = [];
+      for (let i = 0; i < RES; i++) row.push(flat[j * RES + i]);
+      z.push(row);
+    }
+    return z;
+  };
+
+  // temporal color for terrain — average Z (temporal) in each cell
+  const tempField = new Float64Array(RES * RES);
+  const weightField = new Float64Array(RES * RES);
+  for (let j = 0; j < RES; j++) {
+    for (let i = 0; i < RES; i++) {
+      let tw = 0, tt = 0;
+      for (const p of PROJECTS) {
+        const dx = (xs[i] - p.x) / 2.0;
+        const dy = (ys[j] - p.y) / 2.0;
+        const w = Math.exp(-0.5 * (dx*dx + dy*dy));
+        tw += w;
+        tt += w * p.z;
+      }
+      const idx = j * RES + i;
+      tempField[idx] = tw > 0 ? tt / tw : 0;
+      weightField[idx] = tw;
+    }
+  }
+  const tempZ = reshape(Array.from(tempField));
+
+  const outlierProjects = detectOutliers(noveltyPerProject);
+  document.getElementById('outlier-count').textContent = outlierProjects.filter(p => p.isOutlier).length;
+
+  return {
+    xs, ys, RES,
+    densityZ: reshape(densityNorm),
+    noveltyZ: reshape(noveltyNorm),
+    hybridZ: reshape(hybrid),
+    tempZ,
+    outlierProjects
+  };
+}
+
+const TERRAIN = buildTerrain();
+
+// ---- Color scale: temporal ----
+// -10 = deep blue, 0 = white, +10 = deep red
+function tempColor(t) {
+  // t in -10..10
+  const n = (t + 10) / 20;
+  if (n < 0.5) {
+    const f = n / 0.5;
+    const r = Math.round(26 + f * (230));
+    const g = Math.round(58 + f * (230));
+    const b = Math.round(122 + f * (130));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const f = (n - 0.5) / 0.5;
+    const r = Math.round(255);
+    const g = Math.round(255 - f * 215);
+    const b = Math.round(252 - f * 228);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+// Build custom colorscale from tempZ matrix
+function buildColorscale() {
+  return [
+    [0,    '#1a3a7a'],
+    [0.15, '#2a5ac8'],
+    [0.3,  '#7ab0e8'],
+    [0.45, '#c8d8f0'],
+    [0.5,  '#ffffff'],
+    [0.6,  '#f0c8c8'],
+    [0.75, '#e07070'],
+    [0.88, '#c03030'],
+    [1,    '#8a1a1a']
+  ];
+}
+
+// Use tempZ as surfacecolor for the terrain
+function makeSurfaceColor(terrainZ) {
+  // normalize terrainZ for surfacecolor intensity, but color from tempZ
+  // We'll use tempZ directly (range -10..10 → 0..1) as the surfacecolor
+  return TERRAIN.tempZ.map(row => row.map(v => (v + 10) / 20));
+}
+
+function getTerrainZ() {
+  if (currentMode === 'density') return TERRAIN.densityZ;
+  if (currentMode === 'novelty') return TERRAIN.noveltyZ;
+  return TERRAIN.hybridZ;
+}
+
+function buildTraces() {
+  const terrainZ = getTerrainZ();
+  const surfColor = makeSurfaceColor(terrainZ);
+
+  const surfaceTrace = {
+    type: 'surface',
+    x: TERRAIN.xs,
+    y: TERRAIN.ys,
+    z: terrainZ,
+    surfacecolor: surfColor,
+    colorscale: buildColorscale(),
+    cmin: 0, cmax: 1,
+    showscale: false,
+    opacity: 0.88,
+    lighting: { ambient: 0.6, diffuse: 0.8, specular: 0.2, roughness: 0.5 },
+    lightposition: { x: 100, y: 200, z: 300 },
+    contours: {
+      z: { show: true, usecolormap: false, color: 'rgba(255,255,255,0.12)', width: 1, start: 0.1, end: 1, size: 0.1 }
+    },
+    hoverinfo: 'skip',
+    name: 'Terrain'
+  };
+
+  const traces = [surfaceTrace];
+
+  // Project markers per cluster
+  if (showMarkers) {
+    for (const cluster of CLUSTER_NAMES) {
+      if (!visibleClusters.has(cluster)) continue;
+      const pts = TERRAIN.outlierProjects.filter(p => p.cluster === cluster && !p.isOutlier);
+      if (pts.length === 0) continue;
+
+      // Get terrain elevation at each point (nearest grid)
+      const elev = pts.map(p => {
+        const xi = Math.round((p.x + 10) / 20 * (TERRAIN.RES - 1));
+        const yi = Math.round((p.y + 10) / 20 * (TERRAIN.RES - 1));
+        const ci = Math.max(0, Math.min(TERRAIN.RES-1, yi));
+        const ri = Math.max(0, Math.min(TERRAIN.RES-1, xi));
+        return terrainZ[ci][ri];
+      });
+
+      traces.push({
+        type: 'scatter3d',
+        mode: 'markers',
+        x: pts.map(p => p.x),
+        y: pts.map(p => p.y),
+        z: elev.map((e, i) => e + 0.02),
+        text: pts.map(p => `<b>${p.id}</b><br>${p.title}<br>X:${p.x} Y:${p.y} Z:${p.z}`),
+        hovertemplate: '%{text}<extra></extra>',
+        marker: {
+          size: 4,
+          color: CLUSTER_COLORS[cluster],
+          opacity: 0.85,
+          line: { color: '#ffffff', width: 0.5 }
+        },
+        name: cluster,
+        showlegend: false
+      });
+    }
+  }
+
+  // Outlier beacons
+  if (showOutliers) {
+    const outliers = TERRAIN.outlierProjects.filter(p => p.isOutlier && visibleClusters.has(p.cluster));
+    if (outliers.length > 0) {
+      const elev = outliers.map(p => {
+        const xi = Math.round((p.x + 10) / 20 * (TERRAIN.RES - 1));
+        const yi = Math.round((p.y + 10) / 20 * (TERRAIN.RES - 1));
+        const ci = Math.max(0, Math.min(TERRAIN.RES-1, yi));
+        const ri = Math.max(0, Math.min(TERRAIN.RES-1, xi));
+        return terrainZ[ci][ri];
+      });
+
+      // Beacon spikes: line from terrain surface to top
+      for (let i = 0; i < outliers.length; i++) {
+        const p = outliers[i];
+        const base = elev[i];
+        const top = base + 0.25 + p.novelty * 0.025;
+        traces.push({
+          type: 'scatter3d',
+          mode: 'lines',
+          x: [p.x, p.x],
+          y: [p.y, p.y],
+          z: [base, top],
+          line: { color: '#ffd700', width: 3 },
+          hoverinfo: 'skip',
+          showlegend: false,
+          name: ''
+        });
+      }
+
+      traces.push({
+        type: 'scatter3d',
+        mode: 'markers+text',
+        x: outliers.map(p => p.x),
+        y: outliers.map(p => p.y),
+        z: outliers.map((p, i) => elev[i] + 0.28 + p.novelty * 0.025),
+        text: outliers.map(p => p.id),
+        textposition: 'top center',
+        textfont: { size: 9, color: '#ffd700' },
+        hovertemplate: outliers.map(p => `<b>${p.id}</b> ⟡ Epistemic Pioneer<br>${p.title}<br>Novelty Index: ${p.novelty.toFixed(2)}<br>X:${p.x} Y:${p.y} Z:${p.z}<extra></extra>`),
+        marker: {
+          size: 6,
+          symbol: 'diamond',
+          color: '#ffd700',
+          opacity: 1,
+          line: { color: '#ffffff', width: 1 }
+        },
+        name: 'Outliers',
+        showlegend: false
+      });
+    }
+  }
+
+  // Attractor labels at density peaks
+  const attractors = findAttractors();
+  for (const a of attractors) {
+    const xi = Math.round((a.x + 10) / 20 * (TERRAIN.RES - 1));
+    const yi = Math.round((a.y + 10) / 20 * (TERRAIN.RES - 1));
+    const ci = Math.max(0, Math.min(TERRAIN.RES-1, yi));
+    const ri = Math.max(0, Math.min(TERRAIN.RES-1, xi));
+    const elev = terrainZ[ci][ri];
+    traces.push({
+      type: 'scatter3d',
+      mode: 'text',
+      x: [a.x], y: [a.y], z: [elev + 0.05],
+      text: [`◆ ${a.label}`],
+      textposition: 'top center',
+      textfont: { size: 8.5, color: 'rgba(255,255,255,0.65)', family: 'monospace' },
+      hoverinfo: 'skip',
+      showlegend: false,
+      name: ''
+    });
+  }
+
+  return traces;
+}
+
+function findAttractors() {
+  // Known major cluster centroids from data
+  return [
+    { x: -5.2, y: 6.8,  label: 'Structured Mind' },
+    { x: 5.5,  y: 7.2,  label: 'Experiential Poetics' },
+    { x: 6.3,  y: -5.5, label: 'Tactical & Resilient' },
+    { x: -8.0, y: -5.5, label: 'Cybernetic Territory' }
+  ];
+}
+
+const layout = {
+  paper_bgcolor: '#0a0c14',
+  scene: {
+    bgcolor: '#0a0c14',
+    xaxis: {
+      title: { text: '← Systemic | Operational Logic | Contingent →', font: { size: 9, color: '#3a4870' } },
+      range: [-10, 10], gridcolor: '#1a2040', zerolinecolor: '#2a3460',
+      tickfont: { size: 8, color: '#3a4870' }, showbackground: true,
+      backgroundcolor: 'rgba(10,12,26,0.4)'
+    },
+    yaxis: {
+      title: { text: '← Territorial | Horizon of Intention | Somatic →', font: { size: 9, color: '#3a4870' } },
+      range: [-10, 10], gridcolor: '#1a2040', zerolinecolor: '#2a3460',
+      tickfont: { size: 8, color: '#3a4870' }, showbackground: true,
+      backgroundcolor: 'rgba(10,12,26,0.4)'
+    },
+    zaxis: {
+      title: { text: 'Elevation (Density)', font: { size: 9, color: '#3a4870' } },
+      gridcolor: '#1a2040', zerolinecolor: '#2a3460',
+      tickfont: { size: 8, color: '#3a4870' }, showbackground: true,
+      backgroundcolor: 'rgba(10,12,26,0.3)'
+    },
+    camera: { eye: { x: 1.6, y: -1.8, z: 1.2 } },
+    aspectmode: 'manual',
+    aspectratio: { x: 2, y: 2, z: 0.7 }
+  },
+  margin: { l: 0, r: 0, t: 0, b: 0 },
+  showlegend: false,
+  hovermode: 'closest'
+};
+
+const config = {
+  displayModeBar: true,
+  modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+  displaylogo: false,
+  responsive: true
+};
+
+function render() {
+  Plotly.newPlot('chart', buildTraces(), layout, config);
+  document.getElementById('info-panel').style.display = 'block';
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  ['density','novelty','hybrid'].forEach(m => {
+    document.getElementById(`btn-${m}`).classList.toggle('active', m === mode);
+  });
+  render();
+}
+
+function toggleMarkers() {
+  showMarkers = !showMarkers;
+  document.getElementById('btn-markers').classList.toggle('active', showMarkers);
+  render();
+}
+
+function toggleOutliers() {
+  showOutliers = !showOutliers;
+  document.getElementById('btn-outliers').classList.toggle('active', showOutliers);
+  render();
+}
+
+// Cluster toggle buttons (initial build)
+const toggleWrap = document.getElementById('cluster-toggles');
+CLUSTER_NAMES.forEach(name => {
+  const btn = document.createElement('div');
+  btn.className = 'toggle-cluster';
+  btn.style.cssText = `border-color: ${CLUSTER_COLORS[name]}44; color: ${CLUSTER_COLORS[name]}; background: ${CLUSTER_COLORS[name]}18;`;
+  btn.innerHTML = `<div class="dot" style="background:${CLUSTER_COLORS[name]}"></div>${name}`;
+  btn.dataset.active = 'true';
+  btn.addEventListener('click', () => {
+    const active = btn.dataset.active === 'true';
+    btn.dataset.active = active ? 'false' : 'true';
+    btn.style.opacity = active ? '0.35' : '1';
+    if (active) visibleClusters.delete(name);
+    else visibleClusters.add(name);
+    render();
+  });
+  toggleWrap.appendChild(btn);
+});
+
+// Show upload screen on first load; render with default if user clicks "Gunakan Data Bawaan"
+// Auto-render with default so terrain is visible behind the overlay
+render();
+</script>
+</body>
+</html>
