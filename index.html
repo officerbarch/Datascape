@@ -190,19 +190,13 @@
   #legend h3 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #555555; margin-bottom: 6px; }
   .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; color: #888888; }
   .leg-swatch { width: 24px; height: 6px; border-radius: 3px; flex-shrink: 0; }
-  #info-panel {
-    position: absolute; top: 16px; right: 16px;
-    background: rgba(0,0,0,0.95);
-    border: 1px solid #222222;
-    border-radius: 5px;
-    padding: 14px 18px;
-    font-size: 0.72rem;
-    max-width: 220px;
-    display: none;
+  #corpus-stats {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #1a1a1a;
   }
-  #info-panel h4 { font-size: 0.68rem; color: #888888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
-  .stat-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 4px; color: #888888; }
-  .stat-val { color: #111111; font-weight: 600; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; color: #555555; font-size: 0.66rem; }
+  .stat-val { color: #cccccc; font-weight: 600; font-size: 0.7rem; flex-shrink: 0; }
   footer {
     padding: 8px 32px;
     font-size: 0.65rem;
@@ -270,6 +264,32 @@
   <div id="sidebar">
     <div id="sidebar-header">
       <h3>Daftar Proyek</h3>
+
+      <!-- Corpus stats embedded in sidebar -->
+      <div id="corpus-stats">
+        <div class="stat-row"><span>Total</span><span class="stat-val">123</span></div>
+        <div class="stat-row">
+          <span style="color:#1a6fc4">● Structured Mind</span>
+          <span class="stat-val">24</span>
+        </div>
+        <div class="stat-row">
+          <span style="color:#c0392b">● Experiential Poetics</span>
+          <span class="stat-val">29</span>
+        </div>
+        <div class="stat-row">
+          <span style="color:#16803c">● Tactical & Resilient</span>
+          <span class="stat-val">45</span>
+        </div>
+        <div class="stat-row">
+          <span style="color:#7d3c98">● Cybernetic Territory</span>
+          <span class="stat-val">25</span>
+        </div>
+        <div class="stat-row" style="border-top:1px solid #1a1a1a;padding-top:6px;margin-top:4px;">
+          <span>Outliers</span>
+          <span class="stat-val" id="outlier-count">—</span>
+        </div>
+      </div>
+
       <input id="sidebar-search" type="text" placeholder="Cari ID atau judul…" oninput="filterSidebar()">
       <div id="sidebar-sort">
         <button class="sort-btn active" id="sort-id"      onclick="setSortMode('id')">ID</button>
@@ -290,17 +310,7 @@
     <div class="leg-row">▲ Epistemic Pioneers — high novelty index</div>
     </div>
   </div>
-  <div id="info-panel">
-    <h4>Corpus Statistics</h4>
-    <div class="stat-row"><span>Total Projects</span><span class="stat-val">123</span></div>
-    <div class="stat-row"><span>Structured Mind</span><span class="stat-val">24</span></div>
-    <div class="stat-row"><span>Experiential Poetics</span><span class="stat-val">29</span></div>
-    <div class="stat-row"><span>Tactical & Resilient</span><span class="stat-val">45</span></div>
-    <div class="stat-row"><span>Cybernetic Territory</span><span class="stat-val">25</span></div>
-    <div style="margin-top:8px; border-top:1px solid #1e1e1e; padding-top:8px;" class="stat-row">
-      <span>Outliers Detected</span><span class="stat-val" id="outlier-count">—</span>
-    </div>
-  </div>
+
 </div>
 
 <footer>
@@ -339,12 +349,7 @@ const GSHEET_GID = '0';
 // const GSHEET_GID = '0';
 // ============================================================
 
-function buildGSheetURL() {
-  return `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/export?format=csv&gid=${GSHEET_GID}`;
-}
-
 function parseCSV(text) {
-  // Parse CSV rows, handling quoted fields with commas inside
   const lines = text.trim().split('\n');
   return lines.map(line => {
     const cells = [];
@@ -360,52 +365,82 @@ function parseCSV(text) {
   });
 }
 
-async function fetchFromGSheet() {
-  if (!GSHEET_ID || GSHEET_ID.startsWith('GANTI')) {
-    // Belum dikonfigurasi — tampilkan data default diam-diam
-    document.getElementById('upload-bar-info').textContent = '· Data default';
+function applyParsedData(results, bar, info) {
+  if (!results || results.length === 0) {
+    if (bar)  { bar.textContent = '⚠ Format tidak dikenali'; bar.style.color = '#ff6644'; }
+    if (info) info.textContent = '· Data default';
     return;
   }
+  ALL_PROJECTS = results;
+  PROJECTS     = [...results];
+  const years  = [...new Set(results.map(p => p.year).filter(Boolean))].sort();
+  availableYears = years;
+  selectedYears  = new Set();
+  if (bar)  { bar.textContent = `✓ ${results.length} proyek`; bar.style.color = '#00ff88'; }
+  if (info) info.textContent  = `· Google Sheets (live)`;
+  rebuildYearFilter(years);
+  const t = buildTerrain();
+  Object.assign(TERRAIN, t);
+  refreshAll('Google Sheets', results.length);
+}
 
+function fetchFromGSheet() {
   const bar  = document.getElementById('upload-bar-status');
   const info = document.getElementById('upload-bar-info');
-  if (bar)  { bar.textContent = '⏳ Memuat dari Google Sheets…'; bar.style.color = '#888'; }
+  if (bar)  { bar.textContent = '⏳ Memuat…'; bar.style.color = '#888'; }
 
-  try {
-    const url = buildGSheetURL();
-    const res = await fetch(url, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} — pastikan sharing "Anyone with the link"`);
+  // JSONP via gviz/tq — bekerja dari file://, GitHub Pages, manapun tanpa CORS
+  const cbName = '_gs_' + Date.now();
+  const url = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/gviz/tq?tqx=out:json&gid=${GSHEET_GID}&callback=${cbName}`;
 
-    const text = await res.text();
-    if (!text || text.includes('<!DOCTYPE')) throw new Error('Spreadsheet tidak publik atau ID salah');
+  window[cbName] = function(data) {
+    try {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+      if (!data || !data.table) throw new Error('Tidak ada data dari Sheets');
 
-    const rows = parseCSV(text);
-    if (rows.length < 2) throw new Error('Data kosong');
+      const cols = data.table.cols.map(c => (c.label || c.id || '').toLowerCase().trim());
+      const idCol    = cols.findIndex(c => c === 'id' || c === 'no');
+      const titleCol = cols.findIndex(c => c.includes('judul') || c.includes('title'));
+      const coordCol = cols.findIndex(c => c.includes('koordinat') || c.includes('coord'));
+      const quadCol  = cols.findIndex(c => c.includes('kuadran') || c.includes('cluster'));
+      const yearCol  = cols.findIndex(c => c === 'tahun' || c === 'year');
 
-    const parsed = tryAutoParse(rows);
-    if (parsed && parsed.length > 0) {
-      ALL_PROJECTS = parsed;
-      PROJECTS     = [...parsed];
-      const years  = [...new Set(parsed.map(p => p.year).filter(Boolean))].sort();
-      availableYears = years;
-      selectedYears  = new Set();
+      if (coordCol < 0) throw new Error('Kolom Koordinat tidak ditemukan di Sheets');
 
-      if (bar)  { bar.textContent = `✓ ${parsed.length} proyek`; bar.style.color = '#00ff88'; }
-      if (info) info.textContent = `· Google Sheets (live)`;
-
-      rebuildYearFilter(years);
-      const t = buildTerrain();
-      Object.assign(TERRAIN, t);
-      refreshAll('Google Sheets', parsed.length);
-    } else {
-      throw new Error('Format kolom tidak dikenali — periksa nama header');
+      const CMAP = {
+        'i':'Structured Mind','ii':'Experiential Poetics',
+        'iii':'Tactical & Resilient','iv':'Cybernetic Territory'
+      };
+      const results = [];
+      for (const row of (data.table.rows || [])) {
+        if (!row || !row.c) continue;
+        const get = i => (i >= 0 && row.c[i] && row.c[i].v != null) ? String(row.c[i].v).trim() : '';
+        const coordRaw = get(coordCol).replace(/[−–]/g,'-');
+        const nums = coordRaw.replace(/[^0-9.+-]/g,' ').trim().split(/\s+/).filter(Boolean).map(Number);
+        if (nums.length < 2 || nums.some(isNaN)) continue;
+        const id    = get(idCol)    || `P${results.length+1}`;
+        const title = get(titleCol) || id;
+        const quad  = get(quadCol);
+        const year  = get(yearCol);
+        const cluster = CMAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
+        results.push({ id, title, x:nums[0], y:nums[1], z:nums[2]||0, cluster, year });
+      }
+      applyParsedData(results, bar, info);
+    } catch(e) {
+      if (bar)  { bar.textContent = `⚠ ${e.message}`; bar.style.color = '#ff6644'; }
+      if (info) info.textContent = '· Data default';
     }
-  } catch (err) {
-    console.warn('Google Sheets fetch failed:', err.message);
-    if (bar)  { bar.textContent = `⚠ ${err.message}`; bar.style.color = '#ff6644'; }
-    if (info) info.textContent = '· Data default (GSheets gagal)';
-    // Tetap tampilkan data default yang sudah di-render
-  }
+  };
+
+  const script = document.createElement('script');
+  script.src = url;
+  script.onerror = () => {
+    delete window[cbName];
+    if (bar)  { bar.textContent = '⚠ Tidak dapat terhubung ke Sheets'; bar.style.color = '#ff6644'; }
+    if (info) info.textContent = '· Data default';
+  };
+  document.head.appendChild(script);
 }
 
 // ---- XLSX Upload & Parse ----
@@ -681,18 +716,21 @@ function rebuildTerrain() {
   // Recompute TERRAIN with current PROJECTS
   const t = buildTerrain();
   Object.assign(TERRAIN, t);
-  // Update stats
-  const count = PROJECTS.length;
-  const clusterCount = {};
-  CLUSTER_NAMES.forEach(n => clusterCount[n] = 0);
-  PROJECTS.forEach(p => { if (clusterCount[p.cluster] !== undefined) clusterCount[p.cluster]++; });
-  document.querySelectorAll('.stat-val').forEach((el, i) => {
-    if (i === 0) el.textContent = count;
-    else if (i <= 4) el.textContent = clusterCount[CLUSTER_NAMES[i-1]] || 0;
-  });
+  updateStats();
 }
 
-function refreshAll(label, count) {
+function updateStats() {
+  const count = PROJECTS.length;
+  const cc = {};
+  CLUSTER_NAMES.forEach(n => cc[n] = 0);
+  PROJECTS.forEach(p => { if (cc[p.cluster] !== undefined) cc[p.cluster]++; });
+  const vals = document.querySelectorAll('#corpus-stats .stat-val');
+  if (vals[0]) vals[0].textContent = count;
+  if (vals[1]) vals[1].textContent = cc['Structured Mind']      || 0;
+  if (vals[2]) vals[2].textContent = cc['Experiential Poetics'] || 0;
+  if (vals[3]) vals[3].textContent = cc['Tactical & Resilient'] || 0;
+  if (vals[4]) vals[4].textContent = cc['Cybernetic Territory'] || 0;
+}
   document.getElementById('corpus-label').textContent = `Datascape Studio Perancangan Arsitektur ITS`;
   document.getElementById('upload-bar-info').textContent = `· ${label} · ${count} proyek`;
 
@@ -716,15 +754,7 @@ function refreshAll(label, count) {
     toggleWrap.appendChild(btn);
   });
 
-  // Update stats panel
-  const clusterCount = {};
-  CLUSTER_NAMES.forEach(n => clusterCount[n] = 0);
-  PROJECTS.forEach(p => { if (clusterCount[p.cluster] !== undefined) clusterCount[p.cluster]++; });
-  document.querySelectorAll('.stat-val').forEach((el, i) => {
-    if (i === 0) el.textContent = count;
-    else if (i <= 4) el.textContent = clusterCount[CLUSTER_NAMES[i-1]] || 0;
-  });
-
+  updateStats();
   render();
 }
 
@@ -1102,7 +1132,6 @@ const config = {
 
 function render() {
   Plotly.newPlot('chart', buildTraces(), layout, config);
-  document.getElementById('info-panel').style.display = 'block';
   renderSidebar();
 }
 
