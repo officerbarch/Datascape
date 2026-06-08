@@ -319,7 +319,7 @@
     <span class="ctrl-label">Markers</span>
     <button class="btn active" id="btn-markers" onclick="toggleMarkers()">Show Projects</button>
     <button class="btn active" id="btn-outliers" onclick="toggleOutliers()">Show Outliers</button>
-    <button class="btn" id="btn-thumbnails" onclick="toggleThumbnails()">Thumbnails</button>
+    <button class="btn active" id="btn-thumbnails" onclick="toggleThumbnails()">Thumbnails</button>
     <button class="btn" id="btn-labels" onclick="toggleLabels()">Show Labels</button>
   </div>
 </div>
@@ -448,6 +448,34 @@ function parseCSV(text) {
   });
 }
 
+// Convert berbagai format URL Google Drive ke format yang bisa di-embed
+function normalizeImgUrl(url) {
+  if (!url || url.trim() === '') return '';
+  url = url.trim();
+
+  // Sudah format uc?export=view → langsung pakai
+  if (url.includes('uc?export=view') || url.includes('uc?id=')) return url;
+
+  // Format sharing: /file/d/FILE_ID/view → convert ke uc
+  const m1 = url.match(/\/file\/d\/([\w-]+)/);
+  if (m1) return `https://drive.google.com/uc?export=view&id=${m1[1]}`;
+
+  // Format open?id=FILE_ID
+  const m2 = url.match(/[?&]id=([\w-]+)/);
+  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+
+  // Format thumbnail: /thumbnail?id=FILE_ID
+  const m3 = url.match(/thumbnail\?id=([\w-]+)/);
+  if (m3) return `https://drive.google.com/uc?export=view&id=${m3[1]}`;
+
+  // lh3.googleusercontent.com/d/FILE_ID
+  const m4 = url.match(/googleusercontent\.com\/d\/([\w-]+)/);
+  if (m4) return `https://lh3.googleusercontent.com/d/${m4[1]}`;
+
+  // URL lain (imgur, direct link, dll) → pakai langsung
+  return url;
+}
+
 function applyParsedData(results, bar, info) {
   if (!results || results.length === 0) {
     if (bar)  { bar.textContent = '⚠ Format tidak dikenali'; bar.style.color = '#ff6644'; }
@@ -507,7 +535,7 @@ function fetchFromGSheet() {
         const title = get(titleCol) || id;
         const quad  = get(quadCol);
         const year  = get(yearCol);
-        const img   = get(imgCol);
+        const img   = normalizeImgUrl(get(imgCol));
         const cluster = CMAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
         results.push({ id, title, x:nums[0], y:nums[1], z:nums[2]||0, cluster, year, img });
       }
@@ -649,7 +677,7 @@ function tryAutoParse(rows) {
     const title = colMap.title >= 0 ? String(row[colMap.title]).trim() : id;
     const quad  = colMap.quad >= 0  ? String(row[colMap.quad]).trim()  : '';
     const year  = colMap.year >= 0  ? String(row[colMap.year]).trim()  : '';
-    const img   = colMap.img  >= 0  ? String(row[colMap.img]).trim()   : '';
+    const img   = normalizeImgUrl(colMap.img >= 0 ? String(row[colMap.img]).trim() : '');
     const cluster = CLUSTER_MAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
     if (!id || id === '') continue;
     results.push({ id, title, x: nums[0], y: nums[1], z: nums[2]||0, cluster, year, img });
@@ -858,7 +886,7 @@ const CLUSTER_NAMES = Object.keys(CLUSTER_COLORS);
 let visibleClusters = new Set(CLUSTER_NAMES);
 let showMarkers = true;
 let showOutliers = true;
-let showThumbnails = false;
+let showThumbnails = true; // on by default
 let showLabels = false;
 let _lastCamera = null;   // track last camera position for smooth transitions
 let _flyInterval = null;  // animation interval handle
@@ -1044,7 +1072,7 @@ function buildTraces() {
     colorscale: buildColorscale(),
     cmin: 0, cmax: 1,
     showscale: false,
-    opacity: 0.88,
+    opacity: 0.95,
     lighting: { ambient: 0.6, diffuse: 0.8, specular: 0.2, roughness: 0.5 },
     lightposition: { x: 100, y: 200, z: 300 },
     contours: {
@@ -1293,8 +1321,9 @@ function render() {
 
       const id = match[1];
       const p  = PROJECTS.find(p => p.id === id);
-      if (!p || !p.img) return;
+      if (!p) return;
 
+      // Show hover card even if no image — at minimum show title info
       const card    = document.getElementById('hover-card');
       const imgEl   = document.getElementById('hover-card-img');
       const idEl    = document.getElementById('hover-card-id');
@@ -1302,8 +1331,16 @@ function render() {
 
       idEl.textContent    = p.id;
       titleEl.textContent = p.title;
-      imgEl.src = p.img;
-      imgEl.onerror = () => { card.classList.remove('visible'); };
+      if (p.img) {
+        imgEl.style.display = 'block';
+        imgEl.src = p.img;
+        imgEl.onerror = () => {
+          imgEl.style.display = 'none';
+        };
+      } else {
+        imgEl.style.display = 'none';
+        imgEl.src = '';
+      }
 
       // Position card near cursor, keep inside chart bounds
       const rect  = chartEl.getBoundingClientRect();
@@ -1552,6 +1589,13 @@ function showImgPreview(p) {
   titleEl.textContent = `${p.id} — ${p.title}`;
   imgEl.style.display = 'block';
   errEl.style.display = 'none';
+  imgEl.onload = () => { imgEl.style.display = 'block'; errEl.style.display = 'none'; };
+  imgEl.onerror = () => {
+    // Try thumbnail variant
+    const thumbUrl = p.img.replace('uc?export=view', 'thumbnail?').replace('uc?export=view&', 'thumbnail?');
+    if (imgEl.src !== thumbUrl) { imgEl.src = thumbUrl; }
+    else { imgEl.style.display = 'none'; errEl.style.display = 'block'; errEl.textContent = 'Gambar tidak bisa dimuat — pastikan sharing publik'; }
+  };
   imgEl.src = p.img;
   panel.classList.add('visible');
 }
