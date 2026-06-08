@@ -304,7 +304,16 @@
 </header>
 
 
-<!-- hidden file input — fallback only, not shown in UI -->
+<!-- Debug overlay -->
+<div id="debug-overlay" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;">
+  <div style="background:#0d0d0d;border:1px solid #333;border-radius:8px;padding:24px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;font-family:'Roboto Mono',monospace;font-size:0.72rem;color:#ccc;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <strong style="color:#fff;font-size:0.85rem;">Debug Info</strong>
+      <span onclick="document.getElementById('debug-overlay').style.display='none'" style="cursor:pointer;color:#666;font-size:1.2rem;">✕</span>
+    </div>
+    <div id="debug-content"></div>
+  </div>
+</div>
 <input type="file" id="file-input" accept=".xlsx,.xls" onchange="handleFileInput(this)" style="display:none">
 <input type="file" id="file-input-header" accept=".xlsx,.xls" onchange="handleFileInput(this)" style="display:none">
 
@@ -333,6 +342,7 @@
     <button class="btn active" id="btn-outliers" onclick="toggleOutliers()">Show Outliers</button>
     <button class="btn active" id="btn-thumbnails" onclick="toggleThumbnails()">Thumbnails</button>
     <button class="btn" id="btn-labels" onclick="toggleLabels()">Show Labels</button>
+    <button class="btn" id="btn-debug" onclick="showDebugInfo()" style="border-color:#ff6644;color:#ff6644;">Debug</button>
   </div>
 </div>
 
@@ -529,25 +539,33 @@ function fetchFromGSheet() {
   const info = document.getElementById('upload-bar-info');
   if (bar)  { bar.textContent = '⏳ Memuat…'; bar.style.color = '#888'; }
 
-  // JSONP via gviz/tq — bekerja dari file://, GitHub Pages, manapun tanpa CORS
-  const cbName = '_gs_' + Date.now();
-  const url = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/gviz/tq?tqx=out:json&gid=${GSHEET_GID}&callback=${cbName}`;
+  // Gunakan nama callback fixed 'dsCallback' — lebih stabil dari timestamp
+  const cbName = 'dsCallback';
 
-  window[cbName] = function(data) {
+  function handleData(data) {
     try {
+      if (window._dsScript && window._dsScript.parentNode)
+        window._dsScript.parentNode.removeChild(window._dsScript);
       delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
+
       if (!data || !data.table) throw new Error('Tidak ada data dari Sheets');
 
       const cols = data.table.cols.map(c => (c.label || c.id || '').toLowerCase().trim());
+      console.log('[Datascape] Kolom terdeteksi:', cols);
+
       const idCol    = cols.findIndex(c => c === 'id' || c === 'no');
       const titleCol = cols.findIndex(c => c.includes('judul') || c.includes('title'));
       const coordCol = cols.findIndex(c => c.includes('koordinat') || c.includes('coord'));
       const quadCol  = cols.findIndex(c => c.includes('kuadran') || c.includes('cluster'));
-      const yearCol  = cols.findIndex(c => c === 'tahun' || c === 'year');
-      const imgCol   = cols.findIndex(c => c.includes('gambar') || c.includes('image') || c.includes('foto') || c.includes('img'));
+      const yearCol  = cols.findIndex(c => c === 'tahun' || c === 'year' || c === 'angkatan');
+      const imgCol   = cols.findIndex(c =>
+        c.includes('gambar') || c.includes('image') || c.includes('foto') ||
+        c.includes('img') || c.includes('photo') || c.includes('picture') ||
+        c.includes('link') || c.includes('url') || c.includes('thumbnail')
+      );
 
-      if (coordCol < 0) throw new Error('Kolom Koordinat tidak ditemukan di Sheets');
+      console.log('[Datascape] imgCol index:', imgCol, '→ kolom:', imgCol >= 0 ? cols[imgCol] : 'tidak ditemukan');
+      if (coordCol < 0) throw new Error('Kolom Koordinat tidak ditemukan');
 
       const CMAP = {
         'i':'Structured Mind','ii':'Experiential Poetics',
@@ -556,7 +574,13 @@ function fetchFromGSheet() {
       const results = [];
       for (const row of (data.table.rows || [])) {
         if (!row || !row.c) continue;
-        const get = i => (i >= 0 && row.c[i] && row.c[i].v != null) ? String(row.c[i].v).trim() : '';
+        const get = i => {
+          if (i < 0 || !row.c[i]) return '';
+          const cell = row.c[i];
+          const v = cell.v != null ? String(cell.v).trim() : '';
+          const f = cell.f != null ? String(cell.f).trim() : '';
+          return v || f;
+        };
         const coordRaw = get(coordCol).replace(/[−–]/g,'-');
         const nums = coordRaw.replace(/[^0-9.+-]/g,' ').trim().split(/\s+/).filter(Boolean).map(Number);
         if (nums.length < 2 || nums.some(isNaN)) continue;
@@ -565,21 +589,33 @@ function fetchFromGSheet() {
         const quad  = get(quadCol);
         const year  = get(yearCol);
         const img   = normalizeImgUrl(get(imgCol));
+        if (results.length < 3) {
+          const raw = imgCol >= 0 ? row.c[imgCol] : null;
+          console.log(`[Datascape] Row ${results.length} img raw:`, JSON.stringify(raw), '→', img);
+        }
         const cluster = CMAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
         results.push({ id, title, x:nums[0], y:nums[1], z:nums[2]||0, cluster, year, img });
       }
       applyParsedData(results, bar, info);
     } catch(e) {
+      console.error('[Datascape] Parse error:', e);
       if (bar)  { bar.textContent = `⚠ ${e.message}`; bar.style.color = '#ff6644'; }
       if (info) info.textContent = '· Data default';
     }
-  };
+  }
 
+  // Register callback — Google kadang memakai nama 'google' atau nama yang kita daftarkan
+  window[cbName] = handleData;
+  // Fallback: kalau Google override dengan 'google', tangkap juga
+  if (!window.google) window.google = { visualization: { Query: { setResponse: handleData } } };
+
+  const url = `https://docs.google.com/spreadsheets/d/${GSHEET_ID}/gviz/tq?tqx=out:json&gid=${GSHEET_GID}&callback=${cbName}`;
   const script = document.createElement('script');
   script.src = url;
+  window._dsScript = script;
   script.onerror = () => {
     delete window[cbName];
-    if (bar)  { bar.textContent = '⚠ Tidak dapat terhubung ke Sheets'; bar.style.color = '#ff6644'; }
+    if (bar)  { bar.textContent = '⚠ Tidak dapat terhubung'; bar.style.color = '#ff6644'; }
     if (info) info.textContent = '· Data default';
   };
   document.head.appendChild(script);
@@ -1381,14 +1417,16 @@ function render() {
           imgEl.onerror = () => {
             imgEl.classList.remove('loaded');
             const dbg = document.getElementById('info-panel-debug');
-            if (dbg) dbg.textContent = '✗ failed: ' + p.img.slice(0,60);
+            if (dbg) dbg.textContent = '✗ failed: ' + p.img.slice(0,80);
           };
           imgEl.src = p.img;
+          const dbg = document.getElementById('info-panel-debug');
+          if (dbg) dbg.textContent = '⏳ ' + p.img.slice(0,80);
         }
       } else {
         imgEl.classList.remove('loaded');
         const dbg = document.getElementById('info-panel-debug');
-        if (dbg) dbg.textContent = p.img ? '(thumbnails off)' : '(no img field)';
+        if (dbg) dbg.textContent = !p.img ? '(no img field)' : '(thumbnails off)';
       }
 
       panel.classList.add('visible');
@@ -1428,6 +1466,48 @@ function toggleThumbnails() {
   if (!showThumbnails) {
     document.getElementById('info-panel-img').classList.remove('loaded');
   }
+}
+
+function showDebugInfo() {
+  const total = ALL_PROJECTS.length;
+  const withImg = ALL_PROJECTS.filter(p => p.img && p.img.length > 0).length;
+  const sample = ALL_PROJECTS.slice(0, 3);
+
+  let html = `
+    <div style="margin-bottom:12px;">
+      <div style="color:#00E5FF;margin-bottom:6px;">📊 Dataset</div>
+      <div>Total proyek: <span style="color:#fff">${total}</span></div>
+      <div>Proyek dengan gambar: <span style="color:#fff">${withImg}</span></div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="color:#00E5FF;margin-bottom:6px;">🔑 Field pada proyek pertama</div>
+      <div style="background:#111;padding:8px;border-radius:4px;word-break:break-all;">
+        ${sample.map(p => `
+          <div style="margin-bottom:8px;border-bottom:1px solid #222;padding-bottom:8px;">
+            <div>ID: <span style="color:#fff">${p.id}</span></div>
+            <div>Judul: <span style="color:#fff">${p.title?.slice(0,40)}...</span></div>
+            <div>img field: <span style="color:${p.img ? '#00ff88' : '#ff6644'}">${p.img || '(kosong)'}</span></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="color:#00E5FF;margin-bottom:6px;">⚙️ Konfigurasi</div>
+      <div>GSHEET_ID: <span style="color:#fff">${GSHEET_ID?.slice(0,20)}...</span></div>
+      <div>showThumbnails: <span style="color:#fff">${showThumbnails}</span></div>
+    </div>
+    ${withImg === 0 ? `
+    <div style="background:#1a0000;border:1px solid #ff3300;border-radius:4px;padding:10px;color:#ff6644;">
+      ⚠️ Tidak ada proyek yang memiliki field img.<br>
+      Pastikan:<br>
+      1. Header kolom di Sheets adalah <strong>Gambar</strong><br>
+      2. Data sudah di-refresh (reload halaman)<br>
+      3. Kolom Gambar berisi URL Google Drive
+    </div>` : ''}
+  `;
+
+  document.getElementById('debug-content').innerHTML = html;
+  document.getElementById('debug-overlay').style.display = 'flex';
 }
 
 function toggleLabels() {
