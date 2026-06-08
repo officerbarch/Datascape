@@ -72,7 +72,8 @@
   }
   .toggle-cluster .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   #chart-wrap { flex: 1; position: relative; min-height: 520px; display: flex; }
-  #chart { flex: 1; height: calc(100vh - 145px); min-height: 500px; min-width: 0; }
+  #chart-inner { flex: 1; position: relative; min-width: 0; }
+  #chart { width: 100%; height: calc(100vh - 145px); min-height: 500px; }
 
   /* Sidebar project list */
   #sidebar {
@@ -170,15 +171,16 @@
   #info-panel-static {
     position: absolute;
     top: 12px; left: 12px;
-    z-index: 50;
+    z-index: 100;
     pointer-events: none;
     width: 220px;
-    background: rgba(0,0,0,0.82);
-    border: 1px solid #222;
+    background: rgba(0,0,0,0.88);
+    border: 1px solid #333;
     border-radius: 6px;
     overflow: hidden;
-    transition: opacity 0.15s;
+    transition: opacity 0.12s;
     opacity: 0;
+    display: block !important;
   }
   #info-panel-static.visible { opacity: 1; }
   #info-panel-img {
@@ -335,15 +337,18 @@
 </div>
 
 <div id="chart-wrap">
-  <div id="chart"></div>
-
-  <!-- Static info panel top-left -->
-  <div id="info-panel-static">
-    <img id="info-panel-img" src="" alt="">
-    <div id="info-panel-body">
-      <div id="info-panel-id"></div>
-      <div id="info-panel-title"></div>
-      <div id="info-panel-cluster"></div>
+  <!-- chart-inner wraps chart canvas + overlay panel together -->
+  <div id="chart-inner">
+    <div id="chart"></div>
+    <!-- Static info panel top-left, overlaid on chart -->
+    <div id="info-panel-static">
+      <img id="info-panel-img" src="" alt="">
+      <div id="info-panel-body">
+        <div id="info-panel-id"></div>
+        <div id="info-panel-title"></div>
+        <div id="info-panel-cluster"></div>
+        <div id="info-panel-debug" style="font-size:0.55rem;color:#ff6644;margin-top:4px;word-break:break-all;"></div>
+      </div>
     </div>
   </div>
 
@@ -466,26 +471,37 @@ function normalizeImgUrl(url) {
   if (!url || url.trim() === '') return '';
   url = url.trim();
 
-  // Sudah format uc?export=view → langsung pakai
-  if (url.includes('uc?export=view') || url.includes('uc?id=')) return url;
+  // Ekstrak FILE_ID dari semua format Google Drive
+  let fileId = null;
 
-  // Format sharing: /file/d/FILE_ID/view → convert ke uc
+  // /file/d/FILE_ID/
   const m1 = url.match(/\/file\/d\/([\w-]+)/);
-  if (m1) return `https://drive.google.com/uc?export=view&id=${m1[1]}`;
+  if (m1) fileId = m1[1];
 
-  // Format open?id=FILE_ID
-  const m2 = url.match(/[?&]id=([\w-]+)/);
-  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+  // open?id=FILE_ID atau ?id=FILE_ID
+  if (!fileId) {
+    const m2 = url.match(/[?&]id=([\w-]+)/);
+    if (m2) fileId = m2[1];
+  }
 
-  // Format thumbnail: /thumbnail?id=FILE_ID
-  const m3 = url.match(/thumbnail\?id=([\w-]+)/);
-  if (m3) return `https://drive.google.com/uc?export=view&id=${m3[1]}`;
+  // uc?export=view&id=FILE_ID
+  if (!fileId) {
+    const m3 = url.match(/uc\?.*id=([\w-]+)/);
+    if (m3) fileId = m3[1];
+  }
 
   // lh3.googleusercontent.com/d/FILE_ID
-  const m4 = url.match(/googleusercontent\.com\/d\/([\w-]+)/);
-  if (m4) return `https://lh3.googleusercontent.com/d/${m4[1]}`;
+  if (!fileId) {
+    const m4 = url.match(/googleusercontent\.com\/d\/([\w-]+)/);
+    if (m4) fileId = m4[1];
+  }
 
-  // URL lain (imgur, direct link, dll) → pakai langsung
+  // Jika dapat FILE_ID → pakai format thumbnail (tidak kena CORS, bisa embed di <img>)
+  if (fileId) {
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+  }
+
+  // URL lain (bukan Google Drive) → pakai langsung
   return url;
 }
 
@@ -1301,7 +1317,6 @@ const config = {
 function render() {
   Plotly.newPlot('chart', buildTraces(), layout, config).then(() => {
     const chartEl = document.getElementById('chart');
-
     // Helper: extract project ID from point data
     function getIdFromPoint(pt) {
       // text can be string or array depending on trace
@@ -1354,17 +1369,26 @@ function render() {
       clsEl.textContent   = p.cluster;
       clsEl.style.color   = CLUSTER_COLORS[p.cluster] || '#888';
 
-      // Only update image if changed (avoid reload flicker)
       if (showThumbnails && p.img) {
         if (imgEl.dataset.src !== p.img) {
           imgEl.dataset.src = p.img;
           imgEl.classList.remove('loaded');
-          imgEl.onload  = () => imgEl.classList.add('loaded');
-          imgEl.onerror = () => imgEl.classList.remove('loaded');
+          imgEl.onload  = () => {
+            imgEl.classList.add('loaded');
+            const dbg = document.getElementById('info-panel-debug');
+            if (dbg) dbg.textContent = '✓ loaded';
+          };
+          imgEl.onerror = () => {
+            imgEl.classList.remove('loaded');
+            const dbg = document.getElementById('info-panel-debug');
+            if (dbg) dbg.textContent = '✗ failed: ' + p.img.slice(0,60);
+          };
           imgEl.src = p.img;
         }
       } else {
         imgEl.classList.remove('loaded');
+        const dbg = document.getElementById('info-panel-debug');
+        if (dbg) dbg.textContent = p.img ? '(thumbnails off)' : '(no img field)';
       }
 
       panel.classList.add('visible');
