@@ -886,10 +886,8 @@ const CLUSTER_NAMES = Object.keys(CLUSTER_COLORS);
 let visibleClusters = new Set(CLUSTER_NAMES);
 let showMarkers = true;
 let showOutliers = true;
-let showThumbnails = true; // on by default
+let showThumbnails = true;
 let showLabels = false;
-let _lastCamera = null;   // track last camera position for smooth transitions
-let _flyInterval = null;  // animation interval handle
 let currentMode = 'density';
 
 // ---- Terrain Generation ----
@@ -1502,67 +1500,23 @@ function flyToProject(p) {
   const normY = p.y / 10;
   const dist  = 1.1;
   const angle = Math.atan2(normY, normX) + Math.PI;
-  const eyeX  = normX * 0.4 + Math.cos(angle) * dist;
-  const eyeY  = normY * 0.4 + Math.sin(angle) * dist;
-  const eyeZ  = 0.85;
-
-  // Animate in steps for smooth fly-to effect
-  const startEye = _lastCamera || { x: 1.6, y: -1.8, z: 1.2 };
-  const endEye   = { x: eyeX, y: eyeY, z: eyeZ };
-  const endCtr   = { x: normX * 0.12, y: normY * 0.12, z: 0.04 };
-  const steps    = 18;
-  let   step     = 0;
-
-  clearInterval(_flyInterval);
-  _flyInterval = setInterval(() => {
-    step++;
-    const t  = step / steps;
-    const et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease in-out
-    Plotly.relayout('chart', {
-      'scene.camera': {
-        eye:    {
-          x: startEye.x + (endEye.x - startEye.x) * et,
-          y: startEye.y + (endEye.y - startEye.y) * et,
-          z: startEye.z + (endEye.z - startEye.z) * et
-        },
-        center: { x: endCtr.x * et, y: endCtr.y * et, z: endCtr.z * et },
-        up:     { x: 0, y: 0, z: 1 }
-      }
-    });
-    if (step >= steps) {
-      clearInterval(_flyInterval);
-      _lastCamera = endEye;
+  Plotly.relayout('chart', {
+    'scene.camera': {
+      eye:    { x: normX * 0.4 + Math.cos(angle) * dist, y: normY * 0.4 + Math.sin(angle) * dist, z: 0.85 },
+      center: { x: normX * 0.12, y: normY * 0.12, z: 0.04 },
+      up:     { x: 0, y: 0, z: 1 }
     }
-  }, 16); // ~60fps
+  });
 }
 
 function resetCamera() {
-  const endEye = { x: 1.6, y: -1.8, z: 1.2 };
-  const startEye = _lastCamera || endEye;
-  const steps = 18;
-  let step = 0;
-
-  clearInterval(_flyInterval);
-  _flyInterval = setInterval(() => {
-    step++;
-    const t  = step / steps;
-    const et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-    Plotly.relayout('chart', {
-      'scene.camera': {
-        eye:    {
-          x: startEye.x + (endEye.x - startEye.x) * et,
-          y: startEye.y + (endEye.y - startEye.y) * et,
-          z: startEye.z + (endEye.z - startEye.z) * et
-        },
-        center: { x: 0, y: 0, z: 0 },
-        up:     { x: 0, y: 0, z: 1 }
-      }
-    });
-    if (step >= steps) {
-      clearInterval(_flyInterval);
-      _lastCamera = endEye;
+  Plotly.relayout('chart', {
+    'scene.camera': {
+      eye:    { x: 1.6, y: -1.8, z: 1.2 },
+      center: { x: 0,   y: 0,    z: 0   },
+      up:     { x: 0,   y: 0,    z: 1   }
     }
-  }, 16);
+  });
 }
 
 function highlightProject(id) {
