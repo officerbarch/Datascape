@@ -72,7 +72,7 @@
   }
   .toggle-cluster .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   #chart-wrap { flex: 1; position: relative; min-height: 520px; display: flex; }
-  #chart-inner { flex: 1; position: relative; min-width: 0; }
+  #chart-inner { flex: 1; position: relative; min-width: 0; overflow: hidden; }
   #chart { width: 100%; height: calc(100vh - 145px); min-height: 500px; }
 
   /* Sidebar project list */
@@ -169,18 +169,17 @@
   }
   /* Static info panel — top left of chart, no position calc needed */
   #info-panel-static {
-    position: absolute;
-    top: 12px; left: 12px;
+    position: fixed;
+    top: 100px; left: 16px;
     z-index: 100;
     pointer-events: none;
-    width: 220px;
+    width: 210px;
     background: rgba(0,0,0,0.88);
     border: 1px solid #333;
     border-radius: 6px;
     overflow: hidden;
     transition: opacity 0.12s;
     opacity: 0;
-    display: block !important;
   }
   #info-panel-static.visible { opacity: 1; }
   #info-panel-img {
@@ -1428,6 +1427,11 @@ function render() {
         const dbg = document.getElementById('info-panel-debug');
         if (dbg) dbg.textContent = !p.img ? '(no img field)' : '(thumbnails off)';
       }
+
+      // Position panel top-left of chart area
+      const chartRect = document.getElementById('chart').getBoundingClientRect();
+      panel.style.top  = (chartRect.top  + 12) + 'px';
+      panel.style.left = (chartRect.left + 12) + 'px';
 
       panel.classList.add('visible');
     });
