@@ -1046,8 +1046,8 @@ function buildTerrain() {
     for (let i = 0; i < RES; i++) {
       let tw = 0, tt = 0;
       for (const p of PROJECTS) {
-        const dx = (xs[i] - p.x) / 2.0;
-        const dy = (ys[j] - p.y) / 2.0;
+        const dx = (xs[i] - p.x) / 0.2;
+        const dy = (ys[j] - p.y) / 0.2;
         const w = Math.exp(-0.5 * (dx*dx + dy*dy));
         tw += w;
         tt += w * p.z;
@@ -1108,11 +1108,14 @@ function buildColorscale() {
   ];
 }
 
-// Use tempZ as surfacecolor for the terrain
+// Use tempZ as surfacecolor — auto-normalize from actual min/max for full gradient
 function makeSurfaceColor(terrainZ) {
-  // normalize terrainZ for surfacecolor intensity, but color from tempZ
-  // We'll use tempZ directly (range -10..10 → 0..1) as the surfacecolor
-  return TERRAIN.tempZ.map(row => row.map(v => (v + 1) / 2));
+  const flat = TERRAIN.tempZ.flat();
+  const minV = Math.min(...flat);
+  const maxV = Math.max(...flat);
+  const range = maxV - minV || 1;
+  // Map actual data range to 0..1 for full colorscale coverage
+  return TERRAIN.tempZ.map(row => row.map(v => (v - minV) / range));
 }
 
 function getTerrainZ() {
