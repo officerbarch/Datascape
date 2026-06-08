@@ -166,7 +166,36 @@
     font-size: 0.55rem; margin-top: 2px;
     opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  /* Sidebar cluster group header */
+  /* Image preview panel */
+  #img-preview {
+    display: none;
+    flex-shrink: 0;
+    background: #050505;
+    border-top: 1px solid #1a1a1a;
+    padding: 10px 12px;
+    position: relative;
+  }
+  #img-preview.visible { display: block; }
+  #img-preview-close {
+    position: absolute; top: 8px; right: 10px;
+    color: #444; font-size: 1rem; cursor: pointer; line-height: 1;
+    transition: color 0.15s;
+  }
+  #img-preview-close:hover { color: #aaa; }
+  #img-preview-title {
+    font-size: 0.62rem; color: #555; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 6px; padding-right: 16px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #img-preview img {
+    width: 100%; max-height: 180px;
+    object-fit: contain; border-radius: 3px;
+    background: #0a0a0a; display: block;
+  }
+  #img-preview-err {
+    font-size: 0.65rem; color: #444; text-align: center;
+    padding: 20px 0; display: none;
+  }
   .sidebar-group-hdr {
     padding: 8px 14px 3px;
     font-size: 0.58rem;
@@ -302,6 +331,15 @@
       <div id="sidebar-count"></div>
     </div>
     <div id="sidebar-list"></div>
+
+    <!-- Image preview panel -->
+    <div id="img-preview">
+      <div id="img-preview-close" onclick="closeImgPreview()">✕</div>
+      <div id="img-preview-title"></div>
+      <img id="img-preview-el" src="" alt="Preview"
+           onerror="this.style.display='none';document.getElementById('img-preview-err').style.display='block'">
+      <div id="img-preview-err">Gambar tidak dapat dimuat</div>
+    </div>
   </div>
   <div id="legend">
     <h3>Temporal Color Scale</h3>
@@ -408,6 +446,7 @@ function fetchFromGSheet() {
       const coordCol = cols.findIndex(c => c.includes('koordinat') || c.includes('coord'));
       const quadCol  = cols.findIndex(c => c.includes('kuadran') || c.includes('cluster'));
       const yearCol  = cols.findIndex(c => c === 'tahun' || c === 'year');
+      const imgCol   = cols.findIndex(c => c.includes('gambar') || c.includes('image') || c.includes('foto') || c.includes('img'));
 
       if (coordCol < 0) throw new Error('Kolom Koordinat tidak ditemukan di Sheets');
 
@@ -426,8 +465,9 @@ function fetchFromGSheet() {
         const title = get(titleCol) || id;
         const quad  = get(quadCol);
         const year  = get(yearCol);
+        const img   = get(imgCol);
         const cluster = CMAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
-        results.push({ id, title, x:nums[0], y:nums[1], z:nums[2]||0, cluster, year });
+        results.push({ id, title, x:nums[0], y:nums[1], z:nums[2]||0, cluster, year, img });
       }
       applyParsedData(results, bar, info);
     } catch(e) {
@@ -540,9 +580,10 @@ function tryAutoParse(rows) {
     const coordCol = row.findIndex(c => c.includes('koordinat') || c.includes('coord') || c.includes('(x'));
     const quadCol  = row.findIndex(c => c.includes('kuadran') || c.includes('cluster') || c.includes('quadrant'));
     const yearCol  = row.findIndex(c => c === 'tahun' || c === 'year' || c === 'angkatan');
+    const imgCol   = row.findIndex(c => c.includes('gambar') || c.includes('image') || c.includes('foto') || c.includes('img'));
     if (coordCol >= 0 && (idCol >= 0 || titleCol >= 0)) {
       headerIdx = r;
-      colMap = { id: idCol, title: titleCol, coord: coordCol, quad: quadCol, year: yearCol };
+      colMap = { id: idCol, title: titleCol, coord: coordCol, quad: quadCol, year: yearCol, img: imgCol };
       break;
     }
   }
@@ -566,9 +607,10 @@ function tryAutoParse(rows) {
     const title = colMap.title >= 0 ? String(row[colMap.title]).trim() : id;
     const quad  = colMap.quad >= 0  ? String(row[colMap.quad]).trim()  : '';
     const year  = colMap.year >= 0  ? String(row[colMap.year]).trim()  : '';
+    const img   = colMap.img  >= 0  ? String(row[colMap.img]).trim()   : '';
     const cluster = CLUSTER_MAP[quad.toLowerCase()] || assignCluster(nums[0], nums[1]);
     if (!id || id === '') continue;
-    results.push({ id, title, x: nums[0], y: nums[1], z: nums[2]||0, cluster, year });
+    results.push({ id, title, x: nums[0], y: nums[1], z: nums[2]||0, cluster, year, img });
   }
   return results.length > 0 ? results : null;
 }
@@ -1136,7 +1178,36 @@ const config = {
 };
 
 function render() {
-  Plotly.newPlot('chart', buildTraces(), layout, config);
+  Plotly.newPlot('chart', buildTraces(), layout, config).then(() => {
+    const chartEl = document.getElementById('chart');
+
+    // Click on marker → highlight in sidebar + show image
+    chartEl.on('plotly_click', function(data) {
+      if (!data || !data.points || data.points.length === 0) return;
+      const pt = data.points[0];
+      // hovertemplate contains the project ID in bold at the start
+      const text = pt.text || pt.hovertext || '';
+      const match = text.match(/^<b>(TA\w+)<\/b>/);
+      if (match) {
+        const id = match[1];
+        highlightProject(id);
+        // Scroll sidebar to the item
+        setTimeout(() => {
+          const el = document.querySelector(`.proj-item[data-id="${id}"]`);
+          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 50);
+      }
+    });
+
+    // Hover on marker → show tooltip-style ID label
+    chartEl.on('plotly_hover', function(data) {
+      if (!data || !data.points) return;
+      chartEl.style.cursor = data.points[0].data.type === 'scatter3d' ? 'pointer' : 'default';
+    });
+    chartEl.on('plotly_unhover', function() {
+      chartEl.style.cursor = 'default';
+    });
+  });
   renderSidebar();
 }
 
@@ -1230,6 +1301,13 @@ function renderSidebar() {
     const idEl = document.createElement('div');
     idEl.className = 'proj-id';
     idEl.textContent = p.year ? `${p.id} · ${p.year}` : p.id;
+    // Show camera icon if project has image
+    if (p.img) {
+      const cam = document.createElement('span');
+      cam.textContent = ' 🖼';
+      cam.style.cssText = 'font-size:0.6rem;opacity:0.5;';
+      idEl.appendChild(cam);
+    }
 
     const titleEl = document.createElement('div');
     titleEl.className = 'proj-title';
@@ -1254,11 +1332,34 @@ function renderSidebar() {
 function highlightProject(id) {
   _highlighted = (_highlighted === id) ? null : id;
   renderSidebar();
-  // Scroll highlighted item into view
   if (_highlighted) {
     const el = document.querySelector(`.proj-item[data-id="${_highlighted}"]`);
     if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Show image preview if project has image
+    const p = PROJECTS.find(p => p.id === _highlighted);
+    if (p && p.img) showImgPreview(p);
+    else closeImgPreview();
+  } else {
+    closeImgPreview();
   }
+}
+
+function showImgPreview(p) {
+  const panel  = document.getElementById('img-preview');
+  const imgEl  = document.getElementById('img-preview-el');
+  const titleEl= document.getElementById('img-preview-title');
+  const errEl  = document.getElementById('img-preview-err');
+  titleEl.textContent = `${p.id} — ${p.title}`;
+  imgEl.style.display = 'block';
+  errEl.style.display = 'none';
+  imgEl.src = p.img;
+  panel.classList.add('visible');
+}
+
+function closeImgPreview() {
+  const panel = document.getElementById('img-preview');
+  panel.classList.remove('visible');
+  document.getElementById('img-preview-el').src = '';
 }
 
 function filterSidebar() {
