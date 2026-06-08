@@ -364,7 +364,7 @@
         </div>
       </div>
 
-      <input id="sidebar-search" type="text" placeholder="Cari ID atau judul…" oninput="filterSidebar()">
+      <input id="sidebar-search" type="text" placeholder="Cari ID atau judul… (kamera ikut)" oninput="filterSidebar()">
       <div id="sidebar-sort">
         <button class="sort-btn active" id="sort-id"      onclick="setSortMode('id')">ID</button>
         <button class="sort-btn"        id="sort-cluster" onclick="setSortMode('cluster')">Kuadran</button>
@@ -859,7 +859,9 @@ let visibleClusters = new Set(CLUSTER_NAMES);
 let showMarkers = true;
 let showOutliers = true;
 let showThumbnails = false;
-let showLabels = false; // ID labels on terrain, off by default
+let showLabels = false;
+let _lastCamera = null;   // track last camera position for smooth transitions
+let _flyInterval = null;  // animation interval handle
 let currentMode = 'density';
 
 // ---- Terrain Generation ----
@@ -1459,35 +1461,71 @@ function renderSidebar() {
 }
 
 function flyToProject(p) {
-  // Convert project X,Y coordinates to camera eye position
-  // We orbit around the project's position at a closer distance
-  const normX = p.x / 10; // -1..1
-  const normY = p.y / 10; // -1..1
+  const normX = p.x / 10;
+  const normY = p.y / 10;
+  const dist  = 1.1;
+  const angle = Math.atan2(normY, normX) + Math.PI;
+  const eyeX  = normX * 0.4 + Math.cos(angle) * dist;
+  const eyeY  = normY * 0.4 + Math.sin(angle) * dist;
+  const eyeZ  = 0.85;
 
-  // Camera orbits from a fixed angle, zoomed in toward the point
-  const dist   = 1.2;  // closer than default (1.6)
-  const angle  = Math.atan2(normY, normX) + Math.PI; // orbit opposite side
-  const eyeX   = normX * 0.4 + Math.cos(angle) * dist;
-  const eyeY   = normY * 0.4 + Math.sin(angle) * dist;
-  const eyeZ   = 0.9;
+  // Animate in steps for smooth fly-to effect
+  const startEye = _lastCamera || { x: 1.6, y: -1.8, z: 1.2 };
+  const endEye   = { x: eyeX, y: eyeY, z: eyeZ };
+  const endCtr   = { x: normX * 0.12, y: normY * 0.12, z: 0.04 };
+  const steps    = 18;
+  let   step     = 0;
 
-  Plotly.relayout('chart', {
-    'scene.camera': {
-      eye:    { x: eyeX, y: eyeY,   z: eyeZ },
-      center: { x: normX * 0.15, y: normY * 0.15, z: 0.05 },
-      up:     { x: 0, y: 0, z: 1 }
+  clearInterval(_flyInterval);
+  _flyInterval = setInterval(() => {
+    step++;
+    const t  = step / steps;
+    const et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t; // ease in-out
+    Plotly.relayout('chart', {
+      'scene.camera': {
+        eye:    {
+          x: startEye.x + (endEye.x - startEye.x) * et,
+          y: startEye.y + (endEye.y - startEye.y) * et,
+          z: startEye.z + (endEye.z - startEye.z) * et
+        },
+        center: { x: endCtr.x * et, y: endCtr.y * et, z: endCtr.z * et },
+        up:     { x: 0, y: 0, z: 1 }
+      }
+    });
+    if (step >= steps) {
+      clearInterval(_flyInterval);
+      _lastCamera = endEye;
     }
-  });
+  }, 16); // ~60fps
 }
 
 function resetCamera() {
-  Plotly.relayout('chart', {
-    'scene.camera': {
-      eye:    { x: 1.6, y: -1.8, z: 1.2 },
-      center: { x: 0, y: 0, z: 0 },
-      up:     { x: 0, y: 0, z: 1 }
+  const endEye = { x: 1.6, y: -1.8, z: 1.2 };
+  const startEye = _lastCamera || endEye;
+  const steps = 18;
+  let step = 0;
+
+  clearInterval(_flyInterval);
+  _flyInterval = setInterval(() => {
+    step++;
+    const t  = step / steps;
+    const et = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    Plotly.relayout('chart', {
+      'scene.camera': {
+        eye:    {
+          x: startEye.x + (endEye.x - startEye.x) * et,
+          y: startEye.y + (endEye.y - startEye.y) * et,
+          z: startEye.z + (endEye.z - startEye.z) * et
+        },
+        center: { x: 0, y: 0, z: 0 },
+        up:     { x: 0, y: 0, z: 1 }
+      }
+    });
+    if (step >= steps) {
+      clearInterval(_flyInterval);
+      _lastCamera = endEye;
     }
-  });
+  }, 16);
 }
 
 function highlightProject(id) {
@@ -1525,19 +1563,30 @@ function closeImgPreview() {
 }
 
 function filterSidebar() {
-  _sidebarQuery = document.getElementById('sidebar-search').value;
+  _sidebarQuery = document.getElementById('sidebar-search').value.trim();
   renderSidebar();
-  // Auto-fly if search narrows down to exactly 1 result
+
   const results = buildSortedProjects();
-  if (results.length === 1) {
-    highlightProject(results[0].id);
-  } else if (_sidebarQuery === '') {
-    // Search cleared — reset camera and highlight
+
+  if (_sidebarQuery === '') {
+    // Search cleared — reset
     _highlighted = null;
     resetCamera();
     closeImgPreview();
     renderSidebar();
+    return;
   }
+
+  if (results.length === 1) {
+    // Exactly 1 result → auto fly + highlight
+    highlightProject(results[0].id);
+  } else if (results.length > 1 && results.length <= 5) {
+    // 2–5 results → fly to centroid of results
+    const cx = results.reduce((s, p) => s + p.x, 0) / results.length;
+    const cy = results.reduce((s, p) => s + p.y, 0) / results.length;
+    flyToProject({ x: cx, y: cy });
+  }
+  // >5 results → don't move camera, let user browse list
 }
 
 function setSortMode(mode) {
