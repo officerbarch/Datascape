@@ -262,10 +262,44 @@
     font-size: 0.68rem;
     line-height: 1.7;
     pointer-events: none;
+    max-width: 280px;
   }
   #legend h3 { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: #555555; margin-bottom: 6px; }
+  #legend h4 { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: #444; margin: 8px 0 4px; }
   .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; color: #888888; }
   .leg-swatch { width: 24px; height: 6px; border-radius: 3px; flex-shrink: 0; }
+  .leg-divider { border-top: 1px solid #1e1e1e; margin: 8px 0; }
+
+  /* Axis reference table */
+  .axis-block { margin-bottom: 8px; }
+  .axis-label {
+    font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #444; margin-bottom: 4px;
+  }
+  .axis-label span { color: #666; font-weight: 600; }
+  .axis-poles {
+    display: flex; gap: 4px; align-items: stretch;
+  }
+  .pole {
+    flex: 1; border-radius: 3px; padding: 5px 7px;
+    font-size: 0.6rem; line-height: 1.35;
+  }
+  .pole-neg {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #aaaaaa;
+  }
+  .pole-pos {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #aaaaaa;
+  }
+  .pole-val {
+    font-size: 0.65rem; font-weight: 700; font-family: 'Roboto Mono', monospace;
+    display: block; margin-bottom: 2px; color: #666; opacity: 1;
+  }
+  .pole-title { font-weight: 600; display: block; margin-bottom: 2px; color: #cccccc; }
+  .pole-desc { opacity: 0.55; font-size: 0.55rem; line-height: 1.3; }
   #corpus-stats {
     margin-bottom: 10px;
     padding-bottom: 10px;
@@ -411,14 +445,74 @@
     </div>
   </div>
   <div id="legend">
-    <h3>Warna Terrain — Dimensi Temporal (Z)</h3>
+
+    <!-- Axis X -->
+    <div class="axis-block">
+      <div class="axis-label"><span>X</span> &nbsp;Metodologi &amp; Teknologi Konstruksi</div>
+      <div class="axis-poles">
+        <div class="pole pole-neg">
+          <span class="pole-val">−1</span>
+          <span class="pole-title">Tektonika Konvensional</span>
+          <span class="pole-desc">Material fisik · konstruksi analog · struktur standar · realisasi praktis</span>
+        </div>
+        <div class="pole pole-pos">
+          <span class="pole-val">+1</span>
+          <span class="pole-title">Eksplorasi Komputasional</span>
+          <span class="pole-desc">Algoritma · generative design · AI · simulasi · parametric · fabrikasi robotik</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="leg-divider"></div>
+
+    <!-- Axis Y -->
+    <div class="axis-block">
+      <div class="axis-label"><span>Y</span> &nbsp;Skala &amp; Konteks Budaya</div>
+      <div class="axis-poles">
+        <div class="pole pole-neg">
+          <span class="pole-val">−1</span>
+          <span class="pole-title">Kontekstual-Lokal</span>
+          <span class="pole-desc">Vernakular · pelestarian sejarah · mikro-spasial · kearifan lokal · sosiokultural</span>
+        </div>
+        <div class="pole pole-pos">
+          <span class="pole-val">+1</span>
+          <span class="pole-title">Global-Metropolitan</span>
+          <span class="pole-desc">Mega-struktur · urbanisme makro · transformasi kota · spekulasi · lintas batas</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="leg-divider"></div>
+
+    <!-- Axis Z -->
+    <div class="axis-block">
+      <div class="axis-label"><span>Z</span> &nbsp;Orientasi Visi Desain <span style="color:#555;font-weight:400;">(warna terrain)</span></div>
+      <div class="axis-poles">
+        <div class="pole pole-neg">
+          <span class="pole-val">−1</span>
+          <span class="pole-title">Pragmatis-Teknokratis</span>
+          <span class="pole-desc">Fungsi efisien · regulasi · sains bangunan · utilitas · optimasi ekonomi</span>
+        </div>
+        <div class="pole pole-pos">
+          <span class="pole-val">+1</span>
+          <span class="pole-title">Spekulatif-Teoretis</span>
+          <span class="pole-desc">Kritik sosial · manifesto · eksperimentasi filosofis · narasi spasial</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="leg-divider"></div>
+
+    <!-- Color scale -->
+    <h3>Warna Terrain — Dimensi Z</h3>
     <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#00E5FF,#00aacc)"></div> Z Negatif — Pragmatis-Teknokratis</div>
     <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#3a40aa,#7000FF)"></div> Z Netral — Transisi</div>
     <div class="leg-row"><div class="leg-swatch" style="background:linear-gradient(90deg,#dd0066,#FF0055)"></div> Z Positif — Spekulatif-Teoretis</div>
-    <div style="margin-top:8px; border-top:1px solid #1e1e1e; padding-top:8px;">
+
+    <div class="leg-divider"></div>
     <h3>Outlier Beacons</h3>
-    <div class="leg-row">▲ Epistemic Pioneers — high novelty index</div>
-    </div>
+    <div class="leg-row">◆ Proyek dengan novelty index tinggi</div>
+
   </div>
 
 </div>
