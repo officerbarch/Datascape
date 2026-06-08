@@ -1260,17 +1260,15 @@ function render() {
   Plotly.newPlot('chart', buildTraces(), layout, config).then(() => {
     const chartEl = document.getElementById('chart');
 
-    // Click on marker → highlight in sidebar + show image
+    // Click on marker → highlight in sidebar + fly camera to point
     chartEl.on('plotly_click', function(data) {
       if (!data || !data.points || data.points.length === 0) return;
       const pt = data.points[0];
-      // hovertemplate contains the project ID in bold at the start
       const text = pt.text || pt.hovertext || '';
       const match = text.match(/^<b>(TA\w+)<\/b>/);
       if (match) {
         const id = match[1];
-        highlightProject(id);
-        // Scroll sidebar to the item
+        highlightProject(id); // flyToProject called inside
         setTimeout(() => {
           const el = document.querySelector(`.proj-item[data-id="${id}"]`);
           if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1460,17 +1458,50 @@ function renderSidebar() {
   });
 }
 
+function flyToProject(p) {
+  // Convert project X,Y coordinates to camera eye position
+  // We orbit around the project's position at a closer distance
+  const normX = p.x / 10; // -1..1
+  const normY = p.y / 10; // -1..1
+
+  // Camera orbits from a fixed angle, zoomed in toward the point
+  const dist   = 1.2;  // closer than default (1.6)
+  const angle  = Math.atan2(normY, normX) + Math.PI; // orbit opposite side
+  const eyeX   = normX * 0.4 + Math.cos(angle) * dist;
+  const eyeY   = normY * 0.4 + Math.sin(angle) * dist;
+  const eyeZ   = 0.9;
+
+  Plotly.relayout('chart', {
+    'scene.camera': {
+      eye:    { x: eyeX, y: eyeY,   z: eyeZ },
+      center: { x: normX * 0.15, y: normY * 0.15, z: 0.05 },
+      up:     { x: 0, y: 0, z: 1 }
+    }
+  });
+}
+
+function resetCamera() {
+  Plotly.relayout('chart', {
+    'scene.camera': {
+      eye:    { x: 1.6, y: -1.8, z: 1.2 },
+      center: { x: 0, y: 0, z: 0 },
+      up:     { x: 0, y: 0, z: 1 }
+    }
+  });
+}
+
 function highlightProject(id) {
   _highlighted = (_highlighted === id) ? null : id;
   renderSidebar();
   if (_highlighted) {
     const el = document.querySelector(`.proj-item[data-id="${_highlighted}"]`);
     if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    // Show image preview if project has image
     const p = PROJECTS.find(p => p.id === _highlighted);
+    if (p) flyToProject(p);
     if (p && p.img) showImgPreview(p);
     else closeImgPreview();
   } else {
+    resetCamera();
     closeImgPreview();
   }
 }
@@ -1496,6 +1527,17 @@ function closeImgPreview() {
 function filterSidebar() {
   _sidebarQuery = document.getElementById('sidebar-search').value;
   renderSidebar();
+  // Auto-fly if search narrows down to exactly 1 result
+  const results = buildSortedProjects();
+  if (results.length === 1) {
+    highlightProject(results[0].id);
+  } else if (_sidebarQuery === '') {
+    // Search cleared — reset camera and highlight
+    _highlighted = null;
+    resetCamera();
+    closeImgPreview();
+    renderSidebar();
+  }
 }
 
 function setSortMode(mode) {
