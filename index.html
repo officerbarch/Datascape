@@ -320,6 +320,7 @@
     <button class="btn active" id="btn-markers" onclick="toggleMarkers()">Show Projects</button>
     <button class="btn active" id="btn-outliers" onclick="toggleOutliers()">Show Outliers</button>
     <button class="btn" id="btn-thumbnails" onclick="toggleThumbnails()">Thumbnails</button>
+    <button class="btn" id="btn-labels" onclick="toggleLabels()">Show Labels</button>
   </div>
 </div>
 
@@ -857,7 +858,8 @@ const CLUSTER_NAMES = Object.keys(CLUSTER_COLORS);
 let visibleClusters = new Set(CLUSTER_NAMES);
 let showMarkers = true;
 let showOutliers = true;
-let showThumbnails = false; // off by default, toggled via button
+let showThumbnails = false;
+let showLabels = false; // ID labels on terrain, off by default
 let currentMode = 'density';
 
 // ---- Terrain Generation ----
@@ -1088,6 +1090,41 @@ function buildTraces() {
     }
   }
 
+  // ID Labels on terrain
+  if (showLabels && showMarkers) {
+    for (const cluster of CLUSTER_NAMES) {
+      if (!visibleClusters.has(cluster)) continue;
+      const pts = TERRAIN.outlierProjects.filter(p => p.cluster === cluster && !p.isOutlier);
+      if (pts.length === 0) continue;
+
+      const elev = pts.map(p => {
+        const xi = Math.round((p.x + 10) / 20 * (TERRAIN.RES - 1));
+        const yi = Math.round((p.y + 10) / 20 * (TERRAIN.RES - 1));
+        const ci = Math.max(0, Math.min(TERRAIN.RES-1, yi));
+        const ri = Math.max(0, Math.min(TERRAIN.RES-1, xi));
+        return terrainZ[ci][ri];
+      });
+
+      traces.push({
+        type: 'scatter3d',
+        mode: 'text',
+        x: pts.map(p => p.x),
+        y: pts.map(p => p.y),
+        z: elev.map(e => e + 0.06),
+        text: pts.map(p => p.id),
+        textposition: 'top center',
+        textfont: {
+          size: 8,
+          color: CLUSTER_COLORS[cluster],
+          family: 'Roboto Mono, monospace'
+        },
+        hoverinfo: 'skip',
+        showlegend: false,
+        name: ''
+      });
+    }
+  }
+
   // Outlier beacons
   if (showOutliers) {
     const outliers = TERRAIN.outlierProjects.filter(p => p.isOutlier && visibleClusters.has(p.cluster));
@@ -1314,10 +1351,15 @@ function toggleOutliers() {
 function toggleThumbnails() {
   showThumbnails = !showThumbnails;
   document.getElementById('btn-thumbnails').classList.toggle('active', showThumbnails);
-  // Hide card immediately if turning off
   if (!showThumbnails) {
     document.getElementById('hover-card').classList.remove('visible');
   }
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  document.getElementById('btn-labels').classList.toggle('active', showLabels);
+  render();
 }
 
 // ---- Sidebar Project List ----
