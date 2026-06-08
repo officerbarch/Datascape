@@ -166,7 +166,40 @@
     font-size: 0.55rem; margin-top: 2px;
     opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  /* Image preview panel */
+  /* Hover thumbnail card */
+  #hover-card {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    z-index: 50;
+    background: rgba(0,0,0,0.92);
+    border: 1px solid #2a2a2a;
+    border-radius: 5px;
+    padding: 8px;
+    max-width: 180px;
+    box-shadow: 0 4px 20px rgba(0,229,255,0.1);
+  }
+  #hover-card.visible { display: block; }
+  #hover-card-img {
+    width: 164px; height: 110px;
+    object-fit: cover;
+    border-radius: 3px;
+    display: block;
+    background: #111;
+  }
+  #hover-card-id {
+    font-size: 0.6rem; color: #7000FF;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-top: 5px;
+  }
+  #hover-card-title {
+    font-size: 0.65rem; color: #cccccc;
+    line-height: 1.3; margin-top: 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
   #img-preview {
     display: none;
     flex-shrink: 0;
@@ -286,11 +319,19 @@
     <span class="ctrl-label">Markers</span>
     <button class="btn active" id="btn-markers" onclick="toggleMarkers()">Show Projects</button>
     <button class="btn active" id="btn-outliers" onclick="toggleOutliers()">Show Outliers</button>
+    <button class="btn" id="btn-thumbnails" onclick="toggleThumbnails()">Thumbnails</button>
   </div>
 </div>
 
 <div id="chart-wrap">
   <div id="chart"></div>
+
+  <!-- Hover thumbnail card -->
+  <div id="hover-card">
+    <img id="hover-card-img" src="" alt="">
+    <div id="hover-card-id"></div>
+    <div id="hover-card-title"></div>
+  </div>
 
   <!-- Sidebar project list -->
   <div id="sidebar">
@@ -816,6 +857,7 @@ const CLUSTER_NAMES = Object.keys(CLUSTER_COLORS);
 let visibleClusters = new Set(CLUSTER_NAMES);
 let showMarkers = true;
 let showOutliers = true;
+let showThumbnails = false; // off by default, toggled via button
 let currentMode = 'density';
 
 // ---- Terrain Generation ----
@@ -1199,13 +1241,51 @@ function render() {
       }
     });
 
-    // Hover on marker → show tooltip-style ID label
+    // Hover on marker → show thumbnail card if enabled
     chartEl.on('plotly_hover', function(data) {
       if (!data || !data.points) return;
-      chartEl.style.cursor = data.points[0].data.type === 'scatter3d' ? 'pointer' : 'default';
+      const pt = data.points[0];
+      const isMarker = pt.data.type === 'scatter3d';
+      chartEl.style.cursor = isMarker ? 'pointer' : 'default';
+
+      if (!showThumbnails || !isMarker) return;
+
+      const text = pt.text || pt.hovertext || '';
+      const match = text.match(/^<b>(TA\w+)<\/b>/);
+      if (!match) return;
+
+      const id = match[1];
+      const p  = PROJECTS.find(p => p.id === id);
+      if (!p || !p.img) return;
+
+      const card    = document.getElementById('hover-card');
+      const imgEl   = document.getElementById('hover-card-img');
+      const idEl    = document.getElementById('hover-card-id');
+      const titleEl = document.getElementById('hover-card-title');
+
+      idEl.textContent    = p.id;
+      titleEl.textContent = p.title;
+      imgEl.src = p.img;
+      imgEl.onerror = () => { card.classList.remove('visible'); };
+
+      // Position card near cursor, keep inside chart bounds
+      const rect  = chartEl.getBoundingClientRect();
+      const wrap  = document.getElementById('chart-wrap').getBoundingClientRect();
+      const ev    = data.event;
+      const cx    = ev.clientX - wrap.left;
+      const cy    = ev.clientY - wrap.top;
+      const cardW = 196, cardH = 160;
+      const left  = cx + 16 + cardW > wrap.width  ? cx - cardW - 8 : cx + 16;
+      const top   = cy + 16 + cardH > wrap.height ? cy - cardH - 8 : cy + 16;
+
+      card.style.left = left + 'px';
+      card.style.top  = top  + 'px';
+      card.classList.add('visible');
     });
+
     chartEl.on('plotly_unhover', function() {
       chartEl.style.cursor = 'default';
+      document.getElementById('hover-card').classList.remove('visible');
     });
   });
   renderSidebar();
@@ -1229,6 +1309,15 @@ function toggleOutliers() {
   showOutliers = !showOutliers;
   document.getElementById('btn-outliers').classList.toggle('active', showOutliers);
   render();
+}
+
+function toggleThumbnails() {
+  showThumbnails = !showThumbnails;
+  document.getElementById('btn-thumbnails').classList.toggle('active', showThumbnails);
+  // Hide card immediately if turning off
+  if (!showThumbnails) {
+    document.getElementById('hover-card').classList.remove('visible');
+  }
 }
 
 // ---- Sidebar Project List ----
