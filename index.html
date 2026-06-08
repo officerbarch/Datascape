@@ -166,39 +166,49 @@
     font-size: 0.55rem; margin-top: 2px;
     opacity: 0.6; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  /* Hover thumbnail card */
-  #hover-card {
+  /* Static info panel — top left of chart, no position calc needed */
+  #info-panel-static {
     position: absolute;
-    display: none;
-    pointer-events: none;
+    top: 12px; left: 12px;
     z-index: 50;
-    background: rgba(0,0,0,0.92);
-    border: 1px solid #2a2a2a;
-    border-radius: 5px;
-    padding: 8px;
-    max-width: 180px;
-    box-shadow: 0 4px 20px rgba(0,229,255,0.1);
+    pointer-events: none;
+    width: 220px;
+    background: rgba(0,0,0,0.82);
+    border: 1px solid #222;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: opacity 0.15s;
+    opacity: 0;
   }
-  #hover-card.visible { display: block; }
-  #hover-card-img {
-    width: 164px; height: 110px;
+  #info-panel-static.visible { opacity: 1; }
+  #info-panel-img {
+    width: 100%; height: 130px;
     object-fit: cover;
-    border-radius: 3px;
-    display: block;
-    background: #111;
+    display: none;
+    background: #0a0a0a;
   }
-  #hover-card-id {
-    font-size: 0.6rem; color: #7000FF;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin-top: 5px;
+  #info-panel-img.loaded { display: block; }
+  #info-panel-body {
+    padding: 8px 10px 9px;
   }
-  #hover-card-title {
-    font-size: 0.65rem; color: #cccccc;
-    line-height: 1.3; margin-top: 2px;
+  #info-panel-id {
+    font-size: 0.62rem; font-weight: 700;
+    color: #7000FF; text-transform: uppercase;
+    letter-spacing: 0.1em; margin-bottom: 3px;
+    font-family: 'Roboto Mono', monospace;
+  }
+  #info-panel-title {
+    font-size: 0.7rem; color: #dddddd;
+    line-height: 1.35;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  #info-panel-cluster {
+    font-size: 0.58rem; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    opacity: 0.7;
   }
   #img-preview {
     display: none;
@@ -327,11 +337,14 @@
 <div id="chart-wrap">
   <div id="chart"></div>
 
-  <!-- Hover thumbnail card -->
-  <div id="hover-card">
-    <img id="hover-card-img" src="" alt="">
-    <div id="hover-card-id"></div>
-    <div id="hover-card-title"></div>
+  <!-- Static info panel top-left -->
+  <div id="info-panel-static">
+    <img id="info-panel-img" src="" alt="">
+    <div id="info-panel-body">
+      <div id="info-panel-id"></div>
+      <div id="info-panel-title"></div>
+      <div id="info-panel-cluster"></div>
+    </div>
   </div>
 
   <!-- Sidebar project list -->
@@ -1104,7 +1117,7 @@ function buildTraces() {
         x: pts.map(p => p.x),
         y: pts.map(p => p.y),
         z: elev.map((e, i) => e + 0.02),
-        text: pts.map(p => `<b>${p.id}</b><br>${p.title}<br>X:${p.x} Y:${p.y} Z:${p.z}`),
+        text: pts.map(p => `<b>${p.id}</b><br>${p.title}`),
         hovertemplate: '%{text}<extra></extra>',
         marker: {
           size: 4,
@@ -1142,7 +1155,7 @@ function buildTraces() {
         text: pts.map(p => p.id),
         textposition: 'top center',
         textfont: {
-          size: 8,
+          size: 13,
           color: CLUSTER_COLORS[cluster],
           family: 'Roboto Mono, monospace'
         },
@@ -1281,83 +1294,85 @@ const config = {
   displayModeBar: true,
   modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
   displaylogo: false,
-  responsive: true
+  responsive: true,
+  scrollZoom: true
 };
 
 function render() {
   Plotly.newPlot('chart', buildTraces(), layout, config).then(() => {
     const chartEl = document.getElementById('chart');
 
-    // Click on marker → highlight in sidebar + fly camera to point
+    // Helper: extract project ID from point data
+    function getIdFromPoint(pt) {
+      // text can be string or array depending on trace
+      const raw = Array.isArray(pt.text) ? pt.text[pt.pointIndex] : (pt.text || '');
+      const m = String(raw).match(/<b>(TA\w+)<\/b>/);
+      if (m) return m[1];
+      // fallback: hovertemplate
+      const ht = Array.isArray(pt.hovertemplate)
+        ? pt.hovertemplate[pt.pointIndex]
+        : (pt.hovertemplate || '');
+      const m2 = String(ht).match(/<b>(TA\w+)<\/b>/);
+      return m2 ? m2[1] : null;
+    }
+
+    // Click → highlight sidebar + fly (use setTimeout to prevent Plotly freeze)
     chartEl.on('plotly_click', function(data) {
-      if (!data || !data.points || data.points.length === 0) return;
+      if (!data || !data.points || !data.points.length) return;
       const pt = data.points[0];
-      const text = pt.text || pt.hovertext || '';
-      const match = text.match(/^<b>(TA\w+)<\/b>/);
-      if (match) {
-        const id = match[1];
-        highlightProject(id); // flyToProject called inside
-        setTimeout(() => {
-          const el = document.querySelector(`.proj-item[data-id="${id}"]`);
-          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }, 50);
-      }
+      if (pt.data.type !== 'scatter3d') return;
+      const id = getIdFromPoint(pt);
+      if (!id) return;
+      setTimeout(() => {
+        highlightProject(id);
+        const el = document.querySelector(`.proj-item[data-id="${id}"]`);
+        if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 0);
     });
 
-    // Hover on marker → show thumbnail card if enabled
+    // Hover → update static info panel (no position calc = very fast)
     chartEl.on('plotly_hover', function(data) {
       if (!data || !data.points) return;
       const pt = data.points[0];
-      const isMarker = pt.data.type === 'scatter3d';
+      const isMarker = pt.data.type === 'scatter3d' && pt.data.mode !== 'text';
       chartEl.style.cursor = isMarker ? 'pointer' : 'default';
+      if (!isMarker) return;
 
-      if (!showThumbnails || !isMarker) return;
-
-      const text = pt.text || pt.hovertext || '';
-      const match = text.match(/^<b>(TA\w+)<\/b>/);
-      if (!match) return;
-
-      const id = match[1];
-      const p  = PROJECTS.find(p => p.id === id);
+      const id = getIdFromPoint(pt);
+      if (!id) return;
+      const p = PROJECTS.find(q => q.id === id);
       if (!p) return;
 
-      // Show hover card even if no image — at minimum show title info
-      const card    = document.getElementById('hover-card');
-      const imgEl   = document.getElementById('hover-card-img');
-      const idEl    = document.getElementById('hover-card-id');
-      const titleEl = document.getElementById('hover-card-title');
+      const panel   = document.getElementById('info-panel-static');
+      const imgEl   = document.getElementById('info-panel-img');
+      const idEl    = document.getElementById('info-panel-id');
+      const titleEl = document.getElementById('info-panel-title');
+      const clsEl   = document.getElementById('info-panel-cluster');
 
       idEl.textContent    = p.id;
       titleEl.textContent = p.title;
-      if (p.img) {
-        imgEl.style.display = 'block';
-        imgEl.src = p.img;
-        imgEl.onerror = () => {
-          imgEl.style.display = 'none';
-        };
+      clsEl.textContent   = p.cluster;
+      clsEl.style.color   = CLUSTER_COLORS[p.cluster] || '#888';
+
+      // Only update image if changed (avoid reload flicker)
+      if (showThumbnails && p.img) {
+        if (imgEl.dataset.src !== p.img) {
+          imgEl.dataset.src = p.img;
+          imgEl.classList.remove('loaded');
+          imgEl.onload  = () => imgEl.classList.add('loaded');
+          imgEl.onerror = () => imgEl.classList.remove('loaded');
+          imgEl.src = p.img;
+        }
       } else {
-        imgEl.style.display = 'none';
-        imgEl.src = '';
+        imgEl.classList.remove('loaded');
       }
 
-      // Position card near cursor, keep inside chart bounds
-      const rect  = chartEl.getBoundingClientRect();
-      const wrap  = document.getElementById('chart-wrap').getBoundingClientRect();
-      const ev    = data.event;
-      const cx    = ev.clientX - wrap.left;
-      const cy    = ev.clientY - wrap.top;
-      const cardW = 196, cardH = 160;
-      const left  = cx + 16 + cardW > wrap.width  ? cx - cardW - 8 : cx + 16;
-      const top   = cy + 16 + cardH > wrap.height ? cy - cardH - 8 : cy + 16;
-
-      card.style.left = left + 'px';
-      card.style.top  = top  + 'px';
-      card.classList.add('visible');
+      panel.classList.add('visible');
     });
 
     chartEl.on('plotly_unhover', function() {
       chartEl.style.cursor = 'default';
-      document.getElementById('hover-card').classList.remove('visible');
+      document.getElementById('info-panel-static').classList.remove('visible');
     });
   });
   renderSidebar();
@@ -1387,7 +1402,7 @@ function toggleThumbnails() {
   showThumbnails = !showThumbnails;
   document.getElementById('btn-thumbnails').classList.toggle('active', showThumbnails);
   if (!showThumbnails) {
-    document.getElementById('hover-card').classList.remove('visible');
+    document.getElementById('info-panel-img').classList.remove('loaded');
   }
 }
 
